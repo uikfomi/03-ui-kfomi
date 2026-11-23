@@ -23,6 +23,7 @@ Mantenha as responsabilidades desta camada separadas das demais e consulte os ar
 | [PedidoDAOImpl.java](PedidoDAOImpl.java) | Persiste preços, exclusões da caixa, baixa física e despacho; consulta a fila e o histórico. |
 | [PixPagamentoDAOImpl.java](PixPagamentoDAOImpl.java) | Consulta pagamentos e vincula tentativas, IDs remotos e aprovação ao pedido em JDBC. |
 | [ProdutoDAOImpl.java](ProdutoDAOImpl.java) | Persiste catálogo, disponibilidade de venda, estoque e fichas de personalização. |
+| [ProdutoOpcionalDAOImpl.java](ProdutoOpcionalDAOImpl.java) | Consulta e sincroniza os opcionais de cada produto via JDBC. |
 | [README.md](README.md) | Guia de navegação e explicações desta pasta. |
 | [UsuarioDAOImpl.java](UsuarioDAOImpl.java) | Persiste login, e-mail e apelido e bloqueia a conta ativa nas transações. |
 
@@ -45,6 +46,7 @@ src/main/java/com/salgaderia/app/dao/impl/  # Reúne implementações dos contra
 ├── PedidoDAOImpl.java  # Persiste preços, exclusões da caixa, baixa física e despacho; consulta a fila e o histórico.
 ├── PixPagamentoDAOImpl.java  # Consulta pagamentos e vincula tentativas, IDs remotos e aprovação ao pedido em JDBC.
 ├── ProdutoDAOImpl.java  # Persiste catálogo, disponibilidade de venda, estoque e fichas de personalização.
+├── ProdutoOpcionalDAOImpl.java  # Consulta e sincroniza os opcionais de cada produto via JDBC.
 ├── README.md  # Guia de navegação e explicações desta pasta.
 └── UsuarioDAOImpl.java  # Persiste login, e-mail e apelido e bloqueia a conta ativa nas transações.
 ```

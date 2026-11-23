@@ -24,18 +24,19 @@ class OperacaoV162IntegracaoTest {
         try(Connection c=ConnectionFactory.getConnection()){
             c.setAutoCommit(false);
             try{
+                var minimo = dao.buscar(c,false).pedidoMinimoEntrega();
                 dao.definirAberturaManual(c,false);
                 dao.salvarExpediente(c,new ConfiguracaoLoja(true,LocalTime.of(18,0),LocalTime.of(1,0),true));
-                assertEquals(new ConfiguracaoLoja(false,LocalTime.of(18,0),LocalTime.of(1,0),true),dao.buscar(c,true));
+                assertEquals(new ConfiguracaoLoja(false,LocalTime.of(18,0),LocalTime.of(1,0),true,minimo),dao.buscar(c,true));
                 dao.definirAberturaManual(c,true);
-                assertEquals(new ConfiguracaoLoja(true,LocalTime.of(18,0),LocalTime.of(1,0),true),dao.buscar(c,true));
+                assertEquals(new ConfiguracaoLoja(true,LocalTime.of(18,0),LocalTime.of(1,0),true,minimo),dao.buscar(c,true));
             }finally{c.rollback();}
         }
     }
 
     @Test void checkoutFechadoAceitaSoAgendamentoComExpedienteEEntregaExigeDespacho(){
         var estoque=new ProdutoEstoqueServiceImpl();
-        var fechada=new ConfiguracaoLoja(false,LocalTime.of(18,0),LocalTime.of(1,0),true);
+        var fechada=new ConfiguracaoLoja(false,LocalTime.of(18,0),LocalTime.of(1,0),true,BigDecimal.ZERO);
         var vendas=VendaTeste.vendas(new MovimentacaoEstoqueDAOImpl(),PixPagamentoService.demonstracao(),fechada);
         String chave=UUID.randomUUID().toString().replace("-","");
         var cliente=new Cliente(null,"Cliente "+chave,null,null,"85999999999","Rua das Flores",null);

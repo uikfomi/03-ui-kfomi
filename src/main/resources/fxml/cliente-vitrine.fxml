@@ -102,6 +102,7 @@
             <Label text="Cupom de desconto" styleClass="field-label" />
             <TextField fx:id="cupom" promptText="Código do cupom (opcional)" />
             <Label fx:id="mensagemDesconto" wrapText="true" styleClass="subtitle" />
+            <Label fx:id="mensagemMinimo" wrapText="true" styleClass="estoque-esgotado" managed="false" visible="false" />
             <Label fx:id="mensagemFrete" wrapText="true" styleClass="subtitle" managed="false" visible="false" />
             <HBox alignment="CENTER_LEFT"><Label text="Total" HBox.hgrow="ALWAYS" styleClass="field-label" /><Label fx:id="total" styleClass="produto-preco" /></HBox>
             <Label fx:id="orientacaoLoja" wrapText="true" managed="false" visible="false" styleClass="subtitle" />

@@ -6,6 +6,8 @@ Coordena a interação das telas e delega operações de negócio aos serviços.
 
 Mantenha as responsabilidades desta camada separadas das demais e consulte os arquivos relacionados antes de alterações.
 
+Na v1.7.0, o painel administrativo edita categorias livres e grupos de opcionais no cadastro de produtos, configura o mínimo de entrega e destaca as instruções de preparo. A vitrine coordena o diálogo de personalização, explica quanto falta para o mínimo e oferece cancelamento apenas em pedidos pendentes.
+
 ## Explore as subpastas e arquivos
 
 | Caminho | Conteúdo e responsabilidade |

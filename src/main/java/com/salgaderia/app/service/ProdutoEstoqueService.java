@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 import java.util.*;
 public interface ProdutoEstoqueService {
     java.util.List<com.salgaderia.app.model.Categoria> listarCategorias();
+    List<com.salgaderia.app.model.Categoria> listarCategoriasAtivas();
+    void salvarCatalogo(Produto produto, String categoria, BigDecimal ajuste);
     long cadastrar(Produto produto);
     boolean atualizar(Produto produto);
     boolean atualizar(Produto produto, BigDecimal ajustePara);

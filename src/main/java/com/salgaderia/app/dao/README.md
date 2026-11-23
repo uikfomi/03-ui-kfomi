@@ -24,6 +24,7 @@ Mantenha as responsabilidades desta camada separadas das demais e consulte os ar
 | [PedidoDAO.java](PedidoDAO.java) | Define operações transacionais de pedidos, despacho, relatórios e baixa física. |
 | [PixPagamentoDAO.java](PixPagamentoDAO.java) | Contrato de persistência de cobranças, conciliação e status de pagamento. |
 | [ProdutoDAO.java](ProdutoDAO.java) | Define cadastro, consulta, bloqueio de venda e atualização de estoque físico. |
+| [ProdutoOpcionalDAO.java](ProdutoOpcionalDAO.java) | Define consulta e gravação dos opcionais do catálogo. |
 | [README.md](README.md) | Guia de navegação e explicações desta pasta. |
 | [UsuarioDAO.java](UsuarioDAO.java) | Define a persistência da identidade, credenciais e apelido das contas. |
 
@@ -47,6 +48,7 @@ src/main/java/com/salgaderia/app/dao/  # Define operações de acesso a dados in
 │   ├── PedidoDAOImpl.java  # Persiste preços, exclusões da caixa, baixa física e despacho; consulta a fila e o histórico.
 │   ├── PixPagamentoDAOImpl.java  # Consulta pagamentos e vincula tentativas, IDs remotos e aprovação ao pedido em JDBC.
 │   ├── ProdutoDAOImpl.java  # Persiste catálogo, disponibilidade de venda, estoque e fichas de personalização.
+│   ├── ProdutoOpcionalDAOImpl.java  # Consulta e sincroniza os opcionais de cada produto via JDBC.
 │   ├── README.md  # Guia de navegação e explicações desta pasta.
 │   └── UsuarioDAOImpl.java  # Persiste login, e-mail e apelido e bloqueia a conta ativa nas transações.
 ├── .gitkeep  # Marcador que mantém a pasta no controle de versão; não contém dados de aplicação.
@@ -62,6 +64,7 @@ src/main/java/com/salgaderia/app/dao/  # Define operações de acesso a dados in
 ├── PedidoDAO.java  # Define operações transacionais de pedidos, despacho, relatórios e baixa física.
 ├── PixPagamentoDAO.java  # Contrato de persistência de cobranças, conciliação e status de pagamento.
 ├── ProdutoDAO.java  # Define cadastro, consulta, bloqueio de venda e atualização de estoque físico.
+├── ProdutoOpcionalDAO.java  # Define consulta e gravação dos opcionais do catálogo.
 ├── README.md  # Guia de navegação e explicações desta pasta.
 └── UsuarioDAO.java  # Define a persistência da identidade, credenciais e apelido das contas.
 ```

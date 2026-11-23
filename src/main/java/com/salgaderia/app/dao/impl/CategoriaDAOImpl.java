@@ -24,8 +24,22 @@ public class CategoriaDAOImpl implements CategoriaDAO {
             ps.setLong(1,id); try (ResultSet rs = ps.executeQuery()) { return rs.next() ? Optional.of(mapear(rs)) : Optional.empty(); }
         }
     }
-    @Override public List<Categoria> listar(Connection c) throws SQLException {
-        try (PreparedStatement ps = c.prepareStatement("SELECT id,nome,descricao FROM categorias ORDER BY nome,id"); ResultSet rs = ps.executeQuery()) {
+    @Override public long obterOuCriarAtiva(Connection c, String nome) throws SQLException {
+        try (var ps = c.prepareStatement("INSERT INTO categorias(nome) VALUES (?) ON DUPLICATE KEY UPDATE ativa=TRUE")) {
+            ps.setString(1, nome); ps.executeUpdate();
+        }
+        try (var ps = c.prepareStatement("SELECT id FROM categorias WHERE nome=? FOR UPDATE")) {
+            ps.setString(1, nome);
+            try (var rs = ps.executeQuery()) {
+                if (!rs.next()) throw new SQLException("Categoria não encontrada após cadastro.");
+                return rs.getLong(1);
+            }
+        }
+    }
+    @Override public List<Categoria> listar(Connection c) throws SQLException { return listar(c, false); }
+    @Override public List<Categoria> listarAtivas(Connection c) throws SQLException { return listar(c, true); }
+    private List<Categoria> listar(Connection c, boolean somenteAtivas) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("SELECT id,nome,descricao FROM categorias" + (somenteAtivas ? " WHERE ativa" : "") + " ORDER BY nome,id"); ResultSet rs = ps.executeQuery()) {
             List<Categoria> resultado = new ArrayList<>(); while (rs.next()) resultado.add(mapear(rs)); return resultado;
         }
     }

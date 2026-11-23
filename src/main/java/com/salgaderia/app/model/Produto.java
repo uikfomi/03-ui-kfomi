@@ -15,6 +15,7 @@ public class Produto {
     private BigDecimal estoqueMinimo;
     private String urlImagem;
     private boolean disponivelVenda = true;
+    private java.util.List<ProdutoOpcional> opcionais = java.util.List.of();
     private FichaVitrine fichaVitrine = FichaVitrine.VAZIA;
     public Produto(Long id, Categoria categoria, String nome, String descricao, BigDecimal precoVenda,
                    BigDecimal custoProducao, BigDecimal estoqueAtual, BigDecimal estoqueMinimo, String urlImagem) {
@@ -46,6 +47,8 @@ public class Produto {
     public void setUrlImagem(String urlImagem) { this.urlImagem = urlImagem; }
     public FichaVitrine getFichaVitrine() { return fichaVitrine; }
     public void setFichaVitrine(FichaVitrine ficha) { this.fichaVitrine = Validacao.obrigatorio(ficha, "ficha da vitrine"); }
+    public java.util.List<ProdutoOpcional> getOpcionais() { return opcionais; }
+    public void setOpcionais(java.util.List<ProdutoOpcional> opcoes) { opcionais = java.util.List.copyOf(opcoes); }
     public BigDecimal calcularLucroUnitario() { return precoVenda.subtract(custoProducao); }
     public boolean isEstoqueBaixo() { return estoqueAtual.compareTo(estoqueMinimo) <= 0; }
     public void adicionarEstoque(BigDecimal quantidade) { estoqueAtual = estoqueAtual.add(Validacao.positivo(quantidade, "quantidade")); }

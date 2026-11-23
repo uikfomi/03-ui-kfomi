@@ -47,14 +47,14 @@ class ClubeGamificacaoIntegracaoTest {
             assertEquals("ASSINANTE",desconto.estrategia());assertEquals(new BigDecimal("1.50"),desconto.desconto());
             assertEquals("ASSINANTE",fixture.vendas.simular(pedido,"UIKFOMI10").estrategia());
             var entrega=new Pedido(null,cliente,cliente.getCliente(),StatusPedido.PENDENTE,TipoEntrega.ENTREGA,"Endereço teste",
-                    LocalDateTime.now(),pedido.getItens());
+                    LocalDateTime.now(),fixture.pedido(cliente,2).getItens());
             entrega.setFormaPagamento(FormaPagamento.DINHEIRO);
             var comFrete=fixture.vendas.simular(entrega,null);
             assertEquals(0,comFrete.taxaEntrega().signum());
-            assertEquals(new BigDecimal("8.50"),comFrete.total());
+            assertEquals(new BigDecimal("17.00"),comFrete.total());
             long idEntrega=fixture.vendas.finalizar(entrega,null,comFrete);
             var gravado=fixture.vendas.listarDoCliente(cliente).stream().filter(p->p.getId()==idEntrega).findFirst().orElseThrow();
-            assertEquals(0,gravado.getTaxaEntrega().signum());assertEquals(0,new BigDecimal("8.50").compareTo(gravado.calcularTotal()));
+            assertEquals(0,gravado.getTaxaEntrega().signum());assertEquals(0,new BigDecimal("17.00").compareTo(gravado.calcularTotal()));
             var pdv=new Pedido(null,admin,cliente.getCliente(),StatusPedido.PENDENTE,TipoEntrega.RETIRADA,null,
                     LocalDateTime.now(),pedido.getItens());
             assertEquals(new BigDecimal("8.50"),fixture.vendas.simular(pdv,null).total());

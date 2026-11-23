@@ -21,7 +21,7 @@ public class PedidoDAOImpl implements PedidoDAO {
     @Override public java.util.List<Pedido> listarDoCliente(Connection c,UsuarioCliente usuario) throws SQLException {
         String sql="SELECT p.id pedido_id,p.status,p.tipo_entrega,p.endereco_entrega,p.criado_em,p.agendado_para,p.desconto,p.forma_pagamento,p.roleta_liberada,"
                 + "p.status_pagamento,p.pix_provedor,p.taxa_entrega,p.brinde_descricao,p.nome_entregador,"
-                + "i.id item_id,i.quantidade,i.preco_unitario,i.observacao_personalizada,i.grupo_personalizado,i.tipo_personalizacao,i.restricoes_personalizadas,i.filtros_caixa,pr.id produto_id,pr.nome produto_nome,pr.descricao produto_descricao,"
+                + "i.id item_id,i.quantidade,i.preco_unitario,i.observacao_personalizada,i.grupo_personalizado,i.tipo_personalizacao,i.restricoes_personalizadas,i.filtros_caixa,i.adicionais_resumo,i.opcionais_ids,pr.id produto_id,pr.nome produto_nome,pr.descricao produto_descricao,"
                 + "pr.preco_venda,pr.custo_producao,pr.estoque_atual,pr.estoque_minimo,pr.url_imagem,pr.disponivel_venda,"
                 + "cat.id categoria_id,cat.nome categoria_nome,cat.descricao categoria_descricao "
                 + "FROM pedidos p JOIN pedido_itens i ON i.pedido_id=p.id JOIN produtos pr ON pr.id=i.produto_id "
@@ -43,7 +43,7 @@ public class PedidoDAOImpl implements PedidoDAO {
                     Produto produto=new Produto(rs.getLong("produto_id"),categoria,rs.getString("produto_nome"),rs.getString("produto_descricao"),rs.getBigDecimal("preco_venda"),rs.getBigDecimal("custo_producao"),rs.getBigDecimal("estoque_atual"),rs.getBigDecimal("estoque_minimo"),rs.getString("url_imagem"));
                     produto.setDisponivelVenda(rs.getBoolean("disponivel_venda"));
                     dados.itens().add(new PedidoItem(rs.getLong("item_id"),produto,rs.getBigDecimal("quantidade"),rs.getBigDecimal("preco_unitario"),
-                            rs.getString("observacao_personalizada"),personalizacao(rs)));
+                            rs.getString("observacao_personalizada"),personalizacao(rs),opcionaisIds(rs),rs.getString("adicionais_resumo")));
                 }
             }
         }
@@ -53,6 +53,10 @@ public class PedidoDAOImpl implements PedidoDAO {
             pedido.setStatusPagamento(d.situacao());pedido.setPixDemonstracao(d.demo());pedido.setRoletaLiberada(d.roleta());
             if(d.pagamento()!=null)pedido.setFormaPagamento(com.salgaderia.app.model.enums.FormaPagamento.valueOf(d.pagamento()));resultado.add(pedido);});
         return resultado;
+    }
+    private static java.util.Set<Long> opcionaisIds(ResultSet rs) throws SQLException {
+        String ids = rs.getString("opcionais_ids");
+        return ids == null ? java.util.Set.of() : java.util.Set.copyOf(java.util.Arrays.asList(JSON.fromJson(ids, Long[].class)));
     }
     private static PersonalizacaoItem personalizacao(ResultSet rs) throws SQLException {
         String grupo=rs.getString("grupo_personalizado");
@@ -68,7 +72,7 @@ public class PedidoDAOImpl implements PedidoDAO {
     }
     @Override public java.util.List<PedidoFila> listarFila(Connection c) throws SQLException {
         String sql="SELECT p.id,p.status,p.tipo_entrega,p.endereco_entrega,p.criado_em,p.agendado_para,p.desconto,p.status_pagamento,p.pix_provedor,p.taxa_entrega,p.brinde_descricao,p.nome_entregador,COALESCE(ct.nome,u.nome,'Cliente') cliente,COALESCE(NULLIF(TRIM(ct.whatsapp),''),NULLIF(TRIM(ct.telefone),'')) telefone,"
-                + "i.quantidade,i.preco_unitario,i.observacao_personalizada,i.grupo_personalizado,pr.nome produto FROM pedidos p JOIN usuarios u ON u.id=p.usuario_id "
+                + "i.quantidade,i.preco_unitario,i.observacao_personalizada,i.grupo_personalizado,i.adicionais_resumo,pr.nome produto FROM pedidos p JOIN usuarios u ON u.id=p.usuario_id "
                 + "LEFT JOIN contatos ct ON ct.id=p.contato_id LEFT JOIN pedido_itens i ON i.pedido_id=p.id "
                 + "LEFT JOIN produtos pr ON pr.id=i.produto_id WHERE p.origem='VITRINE' AND u.perfil='CLIENTE' "
                 + "AND p.status IN ('PENDENTE','PREPARANDO','PRONTO','SAIU_ENTREGA') AND p.status_pagamento<>'AGUARDANDO_PIX' ORDER BY p.criado_em,p.id,i.id";
@@ -79,8 +83,16 @@ public class PedidoDAOImpl implements PedidoDAO {
             final java.util.List<StringJoiner> itens=new java.util.ArrayList<>();
             final Map<String,StringJoiner> personalizados=new java.util.HashMap<>();
 
-            void adicionar(String grupo,String observacao,String item) {
-                if(grupo==null){itens.add(new StringJoiner("").add(observacao==null?item:item+" ["+observacao+"]"));return;}
+            final java.util.List<String> preparo = new java.util.ArrayList<>();
+
+            void adicionar(String grupo,String observacao,String adicionais,String item) {
+                if(grupo==null){
+                    itens.add(new StringJoiner("").add(item));
+                    if (adicionais != null || observacao != null)
+                        preparo.add(item + (adicionais == null ? "" : "\n" + adicionais)
+                                + (observacao == null ? "" : "\nObservação: " + observacao));
+                    return;
+                }
                 personalizados.computeIfAbsent(grupo,chave->{
                     StringJoiner componentes=new StringJoiner(", ",observacao+": ","");
                     itens.add(componentes);
@@ -97,7 +109,7 @@ public class PedidoDAOImpl implements PedidoDAO {
                     g.total=rs.getBigDecimal("taxa_entrega");g.pagamento=StatusPagamento.valueOf(rs.getString("status_pagamento"));
                     g.entregador=rs.getString("nome_entregador");g.provedor=rs.getString("pix_provedor");g.brinde=rs.getString("brinde_descricao");grupos.put(id,g);}
                 BigDecimal quantidade=rs.getBigDecimal("quantidade");if(quantidade!=null){
-                    g.adicionar(rs.getString("grupo_personalizado"),rs.getString("observacao_personalizada"),
+                    g.adicionar(rs.getString("grupo_personalizado"),rs.getString("observacao_personalizada"),rs.getString("adicionais_resumo"),
                             quantidade.stripTrailingZeros().toPlainString()+" × "+rs.getString("produto"));
                     g.total=g.total.add(quantidade.multiply(rs.getBigDecimal("preco_unitario")));
                 }
@@ -106,7 +118,7 @@ public class PedidoDAOImpl implements PedidoDAO {
         java.util.List<PedidoFila> resultado=new java.util.ArrayList<>();
         for(Grupo g:grupos.values())resultado.add(new PedidoFila(g.id,g.cliente,g.status,g.entrega,g.endereco,g.data,g.total.subtract(g.desconto),
                 g.itens.stream().map(StringJoiner::toString).collect(Collectors.joining("\n"))+(g.brinde==null?"":"\nBrinde: "+g.brinde),
-                g.telefone,g.agendado,g.pagamento,"DEMO".equals(g.provedor),"MERCADO_PAGO".equals(g.provedor),g.entregador));
+                g.telefone,g.agendado,g.pagamento,"DEMO".equals(g.provedor),"MERCADO_PAGO".equals(g.provedor),g.entregador,g.preparo));
         return resultado;
     }
     @Override public void registrarPdv(Connection c,long id,com.salgaderia.app.model.enums.FormaPagamento forma,BigDecimal recebido,BigDecimal troco) throws SQLException {
@@ -134,7 +146,7 @@ public class PedidoDAOImpl implements PedidoDAO {
             try(ResultSet rs=ps.getGeneratedKeys()){if(!rs.next())throw new SQLException("ID de pedido não retornado");id=rs.getLong(1);}
         }
         Map<Long,BigDecimal> restante=new HashMap<>(baixas);
-        try(PreparedStatement ps=c.prepareStatement("INSERT INTO pedido_itens(pedido_id,produto_id,quantidade,preco_unitario,custo_unitario,observacao_personalizada,grupo_personalizado,tipo_personalizacao,restricoes_personalizadas,quantidade_baixada,filtros_caixa) VALUES (?,?,?,?,?,?,?,?,?,?,?)")){
+        try(PreparedStatement ps=c.prepareStatement("INSERT INTO pedido_itens(pedido_id,produto_id,quantidade,preco_unitario,custo_unitario,observacao_personalizada,grupo_personalizado,tipo_personalizacao,restricoes_personalizadas,quantidade_baixada,filtros_caixa,adicionais_resumo,opcionais_ids) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")){
             for(PedidoItem item:pedido.getItens()){
                 long produtoId=item.getProduto().getId();BigDecimal custo=custos.get(produtoId);if(custo==null)throw new SQLException("Custo do produto não informado");
                 ps.setLong(1,id);ps.setLong(2,produtoId);ps.setBigDecimal(3,item.getQuantidade());ps.setBigDecimal(4,item.getPrecoUnitario());ps.setBigDecimal(5,custo);
@@ -149,13 +161,23 @@ public class PedidoDAOImpl implements PedidoDAO {
                 ps.setBigDecimal(10,baixa);
                 ps.setString(11,personalizacao==null||personalizacao.tipo().orcamento()==null?null:
                         JSON.toJson(new FiltrosCaixa(personalizacao.categoriasExcluidas(),personalizacao.produtosExcluidos())));
+                ps.setString(12, item.getAdicionaisResumo());
+                ps.setString(13, item.getOpcionaisIds().isEmpty() ? null : JSON.toJson(item.getOpcionaisIds()));
                 ps.addBatch();
             } ps.executeBatch();
         } return id;
     }
     @Override public Fluxo bloquearFluxo(Connection c,long id) throws SQLException {
-        try(var ps=c.prepareStatement("SELECT status,tipo_entrega FROM pedidos WHERE id=? FOR UPDATE")) {
+        return bloquearFluxo(c, id, null);
+    }
+    @Override public Fluxo bloquearFluxoDoCliente(Connection c,long id,long usuarioId) throws SQLException {
+        return bloquearFluxo(c, id, usuarioId);
+    }
+    private Fluxo bloquearFluxo(Connection c, long id, Long usuarioId) throws SQLException {
+        String filtro = usuarioId == null ? "" : " AND usuario_id=? AND origem='VITRINE'";
+        try(var ps=c.prepareStatement("SELECT status,tipo_entrega FROM pedidos WHERE id=?" + filtro + " FOR UPDATE")) {
             ps.setLong(1,id);
+            if (usuarioId != null) ps.setLong(2, usuarioId);
             try(var rs=ps.executeQuery()) {
                 if(!rs.next())throw new IllegalArgumentException("Pedido não encontrado");
                 return new Fluxo(StatusPedido.valueOf(rs.getString(1)),TipoEntrega.valueOf(rs.getString(2)));

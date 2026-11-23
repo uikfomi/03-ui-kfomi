@@ -32,6 +32,7 @@ Mantenha as responsabilidades desta camada separadas das demais e consulte os ar
 | [PersonalizacaoService.java](PersonalizacaoService.java) | Sorteia e revalida caixas por preço, custo e exclusões; valida a composição do combo. |
 | [PixPayloadService.java](PixPayloadService.java) | Monta BR Code com CRC16 e gera a imagem Pix em memória com ZXing. |
 | [ProdutoEstoqueService.java](ProdutoEstoqueService.java) | Define operações do catálogo, bloqueio de venda e movimentações do estoque físico. |
+| [ProdutoPersonalizacaoService.java](ProdutoPersonalizacaoService.java) | Valida grupos, calcula a franquia e monta o resumo para o preparo. |
 | [README.md](README.md) | Guia de navegação e explicações desta pasta. |
 | [RelatorioFinanceiroService.java](RelatorioFinanceiroService.java) | Contrato de cálculos de balanço, gráficos e exportação CSV. |
 | [WhatsAppLinkService.java](WhatsAppLinkService.java) | Gera links do WhatsApp e os abre e copia em segundo plano. |
@@ -96,6 +97,7 @@ src/main/java/com/salgaderia/app/service/  # Define contratos e serviços de apl
 ├── PersonalizacaoService.java  # Sorteia e revalida caixas por preço, custo e exclusões; valida a composição do combo.
 ├── PixPayloadService.java  # Monta BR Code com CRC16 e gera a imagem Pix em memória com ZXing.
 ├── ProdutoEstoqueService.java  # Define operações do catálogo, bloqueio de venda e movimentações do estoque físico.
+├── ProdutoPersonalizacaoService.java  # Valida grupos, calcula a franquia e monta o resumo para o preparo.
 ├── README.md  # Guia de navegação e explicações desta pasta.
 ├── RelatorioFinanceiroService.java  # Contrato de cálculos de balanço, gráficos e exportação CSV.
 └── WhatsAppLinkService.java  # Gera links do WhatsApp e os abre e copia em segundo plano.

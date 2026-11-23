@@ -25,3 +25,14 @@
 }
 .mesa-livre { -fx-background-color: #d9f4df; -fx-border-color: #3e9855; -fx-text-fill: #205d30; -fx-padding: 20; -fx-background-radius: 10; -fx-border-radius: 10; }
 .mesa-ocupada { -fx-background-color: #fff0d0; -fx-border-color: #bb7020; -fx-text-fill: #713f0a; -fx-padding: 20; -fx-background-radius: 10; -fx-border-radius: 10; }
+
+.preparo-destaque {
+    -fx-background-color: #fff1cc;
+    -fx-border-color: #b45309;
+    -fx-border-width: 0 0 0 4;
+    -fx-padding: 10 14;
+}
+.preparo-titulo, .preparo-instrucoes {
+    -fx-text-fill: #542709;
+    -fx-font-weight: bold;
+}

@@ -34,6 +34,7 @@ final class VendaTeste {
         var dao = new ConfiguracaoLojaDAO() {
             public ConfiguracaoLoja buscar(Connection c,boolean bloquear) { return config; }
             public void salvarExpediente(Connection c,ConfiguracaoLoja nova) { throw new UnsupportedOperationException(); }
+            public void definirPedidoMinimo(Connection c,java.math.BigDecimal valor) { throw new UnsupportedOperationException(); }
             public void definirAberturaManual(Connection c,boolean aberta) { throw new UnsupportedOperationException(); }
         };
         return new OperacaoLojaService(dao,Clock.fixed(AGORA.atZone(FORTALEZA).toInstant(),FORTALEZA));

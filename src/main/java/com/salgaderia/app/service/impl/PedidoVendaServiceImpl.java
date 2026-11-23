@@ -5,6 +5,7 @@ import com.salgaderia.app.model.*;
 import com.salgaderia.app.model.enums.*;
 import com.salgaderia.app.service.PedidoVendaService;
 import com.salgaderia.app.service.PersonalizacaoService;
+import com.salgaderia.app.service.ProdutoPersonalizacaoService;
 import com.salgaderia.app.service.BarramentoPedido;
 import com.salgaderia.app.service.ConquistasObserver;
 import com.salgaderia.app.service.PedidoCancelamentoService;
@@ -22,6 +23,7 @@ import java.time.LocalDate;
 import java.util.*;
 public class PedidoVendaServiceImpl implements PedidoVendaService {
     private final PedidoDAO pedidos;private final ProdutoDAO produtos;private final MovimentacaoEstoqueDAO movimentos;
+    private final ProdutoOpcionalDAO opcionais = new ProdutoOpcionalDAOImpl();
     private final CupomDAO cupons = new CupomDAOImpl();
     private final ClubeDAO clube = new ClubeDAOImpl();
     private final GamificacaoDAO jogo = new GamificacaoDAOImpl();
@@ -70,7 +72,10 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
                 Produto atual=atuais.get(item.getProduto().getId());
                 if(item.getPersonalizacao()==null) {
                     try{item.getQuantidade().intValueExact();}catch(ArithmeticException e){throw new IllegalArgumentException("O pedido anterior contém quantidade não inteira.",e);}
-                    avulsos.merge(atual.getId(),item.getQuantidade(),BigDecimal::add);
+                    if (item.getObservacaoPersonalizada() != null || !item.getOpcionaisIds().isEmpty())
+                        resultado.add(ProdutoPersonalizacaoService.montar(atual, opcionais.listar(c, atual.getId(), false),
+                                item.getOpcionaisIds(), item.getObservacaoPersonalizada(), item.getQuantidade()));
+                    else avulsos.merge(atual.getId(),item.getQuantidade(),BigDecimal::add);
                 }else resultado.add(item.comProdutoAtual(atual));
             }
             avulsos.forEach((id,q)->resultado.add(new PedidoItem(null,atuais.get(id),q,atuais.get(id).getPrecoVenda())));
@@ -101,16 +106,36 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
                 Produto p=atuais.get(id);
                 if(p==null)p=produtos.buscarPorId(c,id,false).orElseThrow(()->new IllegalArgumentException("Produto não encontrado"));
                 p.exigirDisponivelParaVenda();
-                if(p.getPrecoVenda().compareTo(item.getPrecoUnitario())!=0)throw new IllegalArgumentException("Preço do produto mudou");
                 atuais.put(id,p);
             }
-            return calcular(c,pedido,codigo,atuais,false,null);
+            return calcular(c,pedido,codigo,validarItens(c,pedido,atuais,false),false,null);
         });
     }
-    private ResultadoDesconto calcular(Connection c,Pedido pedido,String codigo,Map<Long,Produto> atuais,boolean bloqueado,GamificacaoDAO.Conta conta) throws SQLException {
-        List<PedidoItem> itens=new ArrayList<>();
-        for(PedidoItem item:pedido.getItens())itens.add(item.comProdutoAtual(atuais.get(item.getProduto().getId())));
+    private List<PedidoItem> validarItens(Connection c, Pedido pedido, Map<Long,Produto> atuais, boolean bloquear) throws SQLException {
+        List<PedidoItem> itens = new ArrayList<>();
+        Map<Long,List<ProdutoOpcional>> opcoes = new HashMap<>();
+        for (PedidoItem item : pedido.getItens()) {
+            Produto atual = atuais.get(item.getProduto().getId());
+            List<ProdutoOpcional> catalogo = List.of();
+            if (!item.getOpcionaisIds().isEmpty()) {
+                if (!(pedido.getUsuario() instanceof UsuarioCliente) || item.getPersonalizacao() != null)
+                    throw new IllegalArgumentException("Opcionais só podem ser escolhidos em produtos avulsos da vitrine.");
+                if (!opcoes.containsKey(atual.getId())) opcoes.put(atual.getId(), opcionais.listar(c, atual.getId(), bloquear));
+                catalogo = opcoes.get(atual.getId());
+            }
+            PedidoItem validado = item.getPersonalizacao() == null
+                    ? ProdutoPersonalizacaoService.montar(atual, catalogo, item.getOpcionaisIds(), item.getObservacaoPersonalizada(), item.getQuantidade())
+                    : item.comProdutoAtual(atual);
+            if (validado.getPrecoUnitario().compareTo(item.getPrecoUnitario()) != 0
+                    || !Objects.equals(validado.getAdicionaisResumo(), item.getAdicionaisResumo())
+                    || !Objects.equals(validado.getObservacaoPersonalizada(), item.getObservacaoPersonalizada()))
+                throw new IllegalArgumentException("Preço ou personalização mudou. Remova o item e adicione novamente.");
+            itens.add(validado);
+        }
         PersonalizacaoService.validarComposicao(itens);
+        return itens;
+    }
+    private ResultadoDesconto calcular(Connection c,Pedido pedido,String codigo,List<PedidoItem> itens,boolean bloqueado,GamificacaoDAO.Conta conta) throws SQLException {
         long entregues=pedido.getCliente()==null||pedido.getCliente().getId()==null?0:pedidos.contarEntreguesDoCliente(c,pedido.getCliente().getId());
         Long contaVitrine=pedido.getUsuario() instanceof UsuarioCliente u?u.getId():null;
         BigDecimal taxa=contaVitrine!=null&&pedido.getTipoEntrega()==TipoEntrega.ENTREGA?PixConfiguracao.taxaEntrega():BigDecimal.ZERO;
@@ -156,8 +181,9 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
             }
             boolean vitrine=pedido.getUsuario() instanceof UsuarioCliente;
             GamificacaoDAO.Conta conta=null;
+            ConfiguracaoLoja config = null;
             if(vitrine){
-                operacao.validarPedido(c,pedido.getAgendadoPara());
+                config = operacao.validarPedido(c,pedido.getAgendadoPara());
                 conta=new GamificacaoDAO.Conta(pedido.getUsuario().getId(),pedido.getCliente().getId());
                 if(!usuarios.bloquearClienteAtivo(c,conta.usuarioId(),conta.contatoId()))
                     throw new IllegalArgumentException("Cliente ativo obrigatório.");
@@ -173,8 +199,12 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
                 if(baixa.signum()>0)p.removerEstoque(baixa);
                 bloqueados.put(entrada.getKey(),p);custos.put(entrada.getKey(),p.getCustoProducao());
             }
-            for(PedidoItem item:pedido.getItens())if(item.getPrecoUnitario().compareTo(bloqueados.get(item.getProduto().getId()).getPrecoVenda())!=0)throw new IllegalArgumentException("Preço do pedido diverge do preço atual");
-            ResultadoDesconto desconto=calcular(c,pedido,codigo,bloqueados,true,conta);
+            List<PedidoItem> itens = validarItens(c,pedido,bloqueados,true);
+            if (vitrine) {
+                BigDecimal falta = OperacaoLojaService.faltaParaEntrega(config, pedido.getTipoEntrega(), itens);
+                if (falta.signum() > 0) throw new IllegalArgumentException("Adicione mais R$ " + falta.toPlainString().replace('.', ',') + " para atingir o mínimo de entrega (sem frete).");
+            }
+            ResultadoDesconto desconto=calcular(c,pedido,codigo,itens,true,conta);
             if(esperado!=null && (desconto.subtotal().compareTo(esperado.subtotal())!=0 || desconto.desconto().compareTo(esperado.desconto())!=0 ||
                     desconto.taxaEntrega().compareTo(esperado.taxaEntrega())!=0 || !desconto.estrategia().equals(esperado.estrategia()) ||
                     desconto.freteGratisVip()!=esperado.freteGratisVip()||!Objects.equals(desconto.cupom(),esperado.cupom())||!Objects.equals(desconto.brinde(),esperado.brinde())))
@@ -201,6 +231,22 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
         pedido.setId(venda.id());pedido.setRoletaLiberada(false);pedido.setStatusPagamento(venda.pagamento());pedido.setPixDemonstracao(venda.demo());
         pedido.setTaxaEntrega(venda.desconto().taxaEntrega());pedido.setDesconto(venda.desconto().desconto());pedido.setBrinde(venda.desconto().brinde());
         return venda.id();
+    }
+    @Override public void cancelarDoCliente(UsuarioCliente cliente, long pedidoId) {
+        if (cliente == null || cliente.getId() == null || !cliente.isAtivo() || cliente.getCliente().getId() == null)
+            throw new IllegalArgumentException("Cliente autenticado obrigatório.");
+        ConnectionFactory.executarEmTransacao(c -> {
+            if (!usuarios.bloquearClienteAtivo(c, cliente.getId(), cliente.getCliente().getId()))
+                throw new IllegalArgumentException("Cliente ativo obrigatório.");
+            var fluxo = pedidos.bloquearFluxoDoCliente(c, pedidoId, cliente.getId());
+            if (fluxo.status() != StatusPedido.PENDENTE)
+                throw new IllegalArgumentException("Só é possível cancelar enquanto o pedido aguarda confirmação.");
+            var cobranca = pixDados.buscar(c, pedidoId, true).orElse(null);
+            if (cobranca != null && cobranca.provedor() == PixPagamentoDAO.Provedor.MERCADO_PAGO && cobranca.tentativa() != null)
+                throw new IllegalArgumentException("Este pedido tem uma cobrança PIX real iniciada. Entre em contato com a loja para verificar o pagamento e o cancelamento.");
+            cancelamento.cancelar(c, pedidoId);
+            return null;
+        });
     }
     @Override public void transicionar(long pedidoId,StatusPedido destino,String entregador){
         ConnectionFactory.executarEmTransacao(c->{

@@ -15,6 +15,7 @@ public interface PedidoDAO {
     long inserir(Connection c, Pedido pedido, Map<Long,BigDecimal> custos, Map<Long,BigDecimal> baixas) throws SQLException;
     record Fluxo(StatusPedido status, TipoEntrega modalidade) { }
     Fluxo bloquearFluxo(Connection c,long id) throws SQLException;
+    Fluxo bloquearFluxoDoCliente(Connection c,long id,long usuarioId) throws SQLException;
     void registrarSaidaEntrega(Connection c,long id,String entregador) throws SQLException;
     com.salgaderia.app.model.enums.StatusPagamento statusPagamento(Connection c,long id) throws SQLException;
     Map<Long,BigDecimal> quantidadesBaixadas(Connection c,long id) throws SQLException;

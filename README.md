@@ -1,6 +1,6 @@
 # Ui K'Fomi — Salgaderia Pro
 
-![Versão](https://img.shields.io/badge/vers%C3%A3o-v1.6.4-8b4513)
+![Versão](https://img.shields.io/badge/vers%C3%A3o-v1.7.0-8b4513)
 ![Java](https://img.shields.io/badge/Java-17%2B-orange)
 ![JavaFX](https://img.shields.io/badge/JavaFX-21-blue)
 ![MySQL](https://img.shields.io/badge/MySQL-8-4479A1)
@@ -14,6 +14,7 @@ Sistema desktop para uma salgaderia, com login único, vitrine de pedidos, agend
 
 - [Funcionalidades](#funcionalidades)
 - [Operação da loja](#operação-da-loja)
+- [Categorias, opcionais e cancelamento](#categorias-opcionais-e-cancelamento)
 - [Combos, caixas e fotos](#combos-caixas-e-fotos)
 - [Clube VIP, conquistas e roleta](#clube-vip-conquistas-e-roleta)
 - [Pagamento PIX](#pagamento-pix)
@@ -62,7 +63,15 @@ Sistema desktop para uma salgaderia, com login único, vitrine de pedidos, agend
 - Em **Produtos e estoque**, selecione um produto e use **Bloquear / Liberar Venda**. Estoque zero não esgota o cardápio: produtos liberados são feitos sob demanda. Uma mudança é revalidada antes de finalizar, inclusive para itens que já estejam no carrinho. Para a foto, prefira **Selecionar imagem do computador**.
 - Na **Fila de pedidos**, **Despachar entrega** solicita o nome do entregador. A lista **Meus Pedidos** passa a mostrar o banner de entrega em rota. Se a notificação em WhatsApp estiver ativada e houver telefone, o sistema abre uma mensagem preenchida com o nome do entregador; o operador confirma o envio no WhatsApp.
 
-### Combos, caixas e fotos
+### Categorias, opcionais e cancelamento
+
+- No **Estoque**, ao cadastrar ou editar um produto, selecione uma categoria existente ou digite um novo nome. O filtro da vitrine é carregado do banco com todas as categorias ativas, mesmo quando uma categoria ainda não tem produtos.
+- Na seção **Bordas e adicionais** do produto, informe o grupo, a opção, o acréscimo, quantas escolhas com preço cadastrado são grátis e o máximo de escolhas por unidade. Use os mesmos limites em todas as opções do grupo. Ex.: **Borda Recheada**, máximo 1; **Adicionais**, máximo 3 com o primeiro grátis. A franquia segue a ordem do catálogo.
+- Na vitrine, o produto abre uma janela para selecionar opcionais e/ou escrever uma observação. O preço é mostrado antes de adicionar, e as instruções ficam em destaque na **Fila de pedidos**. O histórico mantém o resumo da compra, mesmo se o catálogo mudar.
+- Em **Status da Loja**, configure o **Pedido mínimo para entrega** (padrão **R$ 20,00**). O mínimo usa o subtotal dos itens e opcionais antes de descontos promocionais, sem frete. **Retirada** e **Local** não exigem mínimo.
+- Em **Meus Pedidos**, **Cancelar Pedido** aparece somente enquanto o pedido estiver pendente. Depois que a cozinha começa a preparar, o cliente deve falar com a loja. Se uma cobrança PIX real já foi iniciada, o cancelamento também precisa ser tratado com a loja; o aplicativo não faz estornos.
+
+## Combos, caixas e fotos
 
 1. **Configurar o catálogo:** cadastre os produtos normalmente em **Produtos e estoque**, com preço, custo e disponibilidade. Para aparecer na seleção de bebidas do combo, o produto deve pertencer a uma categoria cujo nome contenha “bebid”, como **Bebidas**. Não é preciso preencher ficha técnica de massa ou recheio.
 2. **Montar um combo:** escolha um principal, um acompanhamento diferente e uma bebida. São três produtos reais, liberados para venda, com prévia de **10% OFF** no combo. O checkout aplica a regra do maior desconto único.
@@ -124,6 +133,7 @@ mysql -u root -p < database/scripts/etapa13_clube_gamificacao.sql
 mysql -u root -p < database/scripts/etapa14_pix_roleta_vip.sql
 mysql -u root -p < database/scripts/etapa15_operacao_loja.sql
 mysql -u root -p < database/scripts/etapa16_cadastro_caixa_clube_vip.sql
+mysql -u root -p < database/scripts/etapa17_personalizacao_entrega.sql
 ```
 
 **Execute as migrações na ordem e somente uma vez.** Embora o schema inicial use `IF NOT EXISTS`, os scripts de migração usam `ALTER TABLE` não idempotente. Antes de atualizar um banco existente, faça backup, confira quais migrações já foram aplicadas e revise dados legados; DDL no MySQL pode causar commit implícito. Usuários clientes antigos sem contato vinculado e fornecedores sem os campos adicionais precisam de saneamento manual. Consulte [as notas de persistência](docs/etapa4-persistencia.md).
@@ -296,6 +306,7 @@ Os comentários descrevem a responsabilidade de cada item.
 │   │   ├── etapa14_pix_roleta_vip.sql  # Migra estados de pagamento, referências PIX, cupons com validade e prêmios VIP.
 │   │   ├── etapa15_operacao_loja.sql  # Adiciona expediente da loja, bloqueio de venda, baixa física e saída para entrega.
 │   │   ├── etapa16_cadastro_caixa_clube_vip.sql  # Migra o cadastro por e-mail, os filtros da caixa e o plano VIP único.
+│   │   ├── etapa17_personalizacao_entrega.sql  # Cria opcionais e registra categorias ativas, instruções do pedido e mínimo de entrega.
 │   │   ├── etapa4_migracao.sql  # Migração de contatos, usuários e custos históricos.
 │   │   ├── etapa8_pdv.sql  # Colunas de origem e pagamento do PDV.
 │   │   ├── etapa9_descontos.sql  # Cupons e registro de descontos por pedido.
@@ -352,6 +363,7 @@ Os comentários descrevem a responsabilidade de cada item.
 │   │   │   │   │   │   │   │   ├── PedidoDAOImpl.java  # Persiste preços, exclusões da caixa, baixa física e despacho; consulta a fila e o histórico.
 │   │   │   │   │   │   │   │   ├── PixPagamentoDAOImpl.java  # Consulta pagamentos e vincula tentativas, IDs remotos e aprovação ao pedido em JDBC.
 │   │   │   │   │   │   │   │   ├── ProdutoDAOImpl.java  # Persiste catálogo, disponibilidade de venda, estoque e fichas de personalização.
+│   │   │   │   │   │   │   │   ├── ProdutoOpcionalDAOImpl.java  # Consulta e sincroniza os opcionais de cada produto via JDBC.
 │   │   │   │   │   │   │   │   ├── README.md  # Guia de navegação e explicações desta pasta.
 │   │   │   │   │   │   │   │   └── UsuarioDAOImpl.java  # Persiste login, e-mail e apelido e bloqueia a conta ativa nas transações.
 │   │   │   │   │   │   │   ├── .gitkeep  # Marcador que mantém a pasta no controle de versão; não contém dados de aplicação.
@@ -367,6 +379,7 @@ Os comentários descrevem a responsabilidade de cada item.
 │   │   │   │   │   │   │   ├── PedidoDAO.java  # Define operações transacionais de pedidos, despacho, relatórios e baixa física.
 │   │   │   │   │   │   │   ├── PixPagamentoDAO.java  # Contrato de persistência de cobranças, conciliação e status de pagamento.
 │   │   │   │   │   │   │   ├── ProdutoDAO.java  # Define cadastro, consulta, bloqueio de venda e atualização de estoque físico.
+│   │   │   │   │   │   │   ├── ProdutoOpcionalDAO.java  # Define consulta e gravação dos opcionais do catálogo.
 │   │   │   │   │   │   │   ├── README.md  # Guia de navegação e explicações desta pasta.
 │   │   │   │   │   │   │   └── UsuarioDAO.java  # Define a persistência da identidade, credenciais e apelido das contas.
 │   │   │   │   │   │   ├── exception/  # Exceções personalizadas de domínio e persistência.
@@ -402,7 +415,7 @@ Os comentários descrevem a responsabilidade de cada item.
 │   │   │   │   │   │   │   ├── AvaliacaoResumo.java  # Projeção de avaliação com comentário, resposta oficial e foto para moderação.
 │   │   │   │   │   │   │   ├── Categoria.java  # Categoria de produtos.
 │   │   │   │   │   │   │   ├── Cliente.java  # Contato especializado em cliente.
-│   │   │   │   │   │   │   ├── ConfiguracaoLoja.java  # Representa o expediente, o modo automático e a chave manual da loja.
+│   │   │   │   │   │   │   ├── ConfiguracaoLoja.java  # Representa expediente, modo automático, chave manual e mínimo para entrega.
 │   │   │   │   │   │   │   ├── ConquistaCliente.java  # Representa um selo e a data em que foi desbloqueado.
 │   │   │   │   │   │   │   ├── Contato.java  # Abstração comum de contatos.
 │   │   │   │   │   │   │   ├── CupomRoleta.java  # Projeção de código de resgate com benefício, mínimo e data de expiração.
@@ -411,12 +424,13 @@ Os comentários descrevem a responsabilidade de cada item.
 │   │   │   │   │   │   │   ├── MensalidadeClube.java  # Cotação imutável de valor e desconto de uma mensalidade pendente.
 │   │   │   │   │   │   │   ├── MovimentacaoEstoque.java  # Registro de entrada ou saída de estoque.
 │   │   │   │   │   │   │   ├── Pedido.java  # Mantém itens, total, frete, pagamento, status e liberação da roleta.
-│   │   │   │   │   │   │   ├── PedidoFila.java  # Projeção de preparo com pagamento, modalidade, itens, entrega e agendamento.
-│   │   │   │   │   │   │   ├── PedidoItem.java  # Registra produto, quantidade, preço histórico e eventual personalização do item.
+│   │   │   │   │   │   │   ├── PedidoFila.java  # Projeção da fila com modalidade, pagamento e instruções de preparo.
+│   │   │   │   │   │   │   ├── PedidoItem.java  # Registra quantidade, preço histórico, opcionais e observações do item.
 │   │   │   │   │   │   │   ├── PersonalizacaoItem.java  # Identifica o grupo, a faixa de orçamento e as exclusões da caixa; preserva os tipos antigos.
 │   │   │   │   │   │   │   ├── PlanoAssinatura.java  # Modela os termos de um plano e define o nome, a mensalidade e o desconto do VIP.
 │   │   │   │   │   │   │   ├── PremioRoleta.java  # Define fatias comuns/VIP e registra resultado, prazo e giro extra.
 │   │   │   │   │   │   │   ├── Produto.java  # Representa preço, custos, saldo físico, disponibilidade de venda e ficha do catálogo.
+│   │   │   │   │   │   │   ├── ProdutoOpcional.java  # Representa uma borda ou adicional e suas regras de preço e quantidade.
 │   │   │   │   │   │   │   ├── README.md  # Guia de navegação e explicações desta pasta.
 │   │   │   │   │   │   │   ├── Usuario.java  # Abstração de usuário e permissões.
 │   │   │   │   │   │   │   ├── UsuarioAdmin.java  # Usuário administrativo.
@@ -477,6 +491,7 @@ Os comentários descrevem a responsabilidade de cada item.
 │   │   │   │   │   │   │   ├── PersonalizacaoService.java  # Sorteia e revalida caixas por preço, custo e exclusões; valida a composição do combo.
 │   │   │   │   │   │   │   ├── PixPayloadService.java  # Monta BR Code com CRC16 e gera a imagem Pix em memória com ZXing.
 │   │   │   │   │   │   │   ├── ProdutoEstoqueService.java  # Define operações do catálogo, bloqueio de venda e movimentações do estoque físico.
+│   │   │   │   │   │   │   ├── ProdutoPersonalizacaoService.java  # Valida grupos, calcula a franquia e monta o resumo para o preparo.
 │   │   │   │   │   │   │   ├── README.md  # Guia de navegação e explicações desta pasta.
 │   │   │   │   │   │   │   ├── RelatorioFinanceiroService.java  # Contrato de cálculos de balanço, gráficos e exportação CSV.
 │   │   │   │   │   │   │   └── WhatsAppLinkService.java  # Gera links do WhatsApp e os abre e copia em segundo plano.
@@ -558,6 +573,7 @@ Os comentários descrevem a responsabilidade de cada item.
 │   │   │   │   │   │   │   ├── RelatorioCsvTest.java  # Verifica o balanço exportado em CSV.
 │   │   │   │   │   │   │   ├── VendaTeste.java  # Fornece cadastro isolado, relógio fixo e configuração de loja para testes de venda.
 │   │   │   │   │   │   │   ├── VitrineV150IntegracaoTest.java  # Valida persistência de exclusões e rechecagem de custos, preços e combos antes da venda.
+│   │   │   │   │   │   │   ├── VitrineV170IntegracaoTest.java  # Valida categorias, opcionais, mínimo e cancelamento no MySQL.
 │   │   │   │   │   │   │   └── WhatsAppLinkServiceTest.java  # Testa links, mensagens, configuração e abertura assíncrona do WhatsApp.
 │   │   │   │   │   │   └── README.md  # Guia de navegação e explicações desta pasta.
 │   │   │   │   │   └── README.md  # Guia de navegação e explicações desta pasta.

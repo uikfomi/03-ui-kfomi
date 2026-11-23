@@ -27,6 +27,7 @@ Execute os testes compatíveis com o ambiente; os testes de integração podem e
 | [RelatorioCsvTest.java](RelatorioCsvTest.java) | Verifica o balanço exportado em CSV. |
 | [VendaTeste.java](VendaTeste.java) | Fornece cadastro isolado, relógio fixo e configuração de loja para testes de venda. |
 | [VitrineV150IntegracaoTest.java](VitrineV150IntegracaoTest.java) | Valida persistência de exclusões e rechecagem de custos, preços e combos antes da venda. |
+| [VitrineV170IntegracaoTest.java](VitrineV170IntegracaoTest.java) | Valida categorias, opcionais, mínimo e cancelamento no MySQL. |
 | [WhatsAppLinkServiceTest.java](WhatsAppLinkServiceTest.java) | Testa links, mensagens, configuração e abertura assíncrona do WhatsApp. |
 
 ## Árvore estrutural comentada
@@ -55,6 +56,7 @@ src/test/java/com/salgaderia/app/service/  # Reúne testes automatizados dos com
 ├── RelatorioCsvTest.java  # Verifica o balanço exportado em CSV.
 ├── VendaTeste.java  # Fornece cadastro isolado, relógio fixo e configuração de loja para testes de venda.
 ├── VitrineV150IntegracaoTest.java  # Valida persistência de exclusões e rechecagem de custos, preços e combos antes da venda.
+├── VitrineV170IntegracaoTest.java  # Valida categorias, opcionais, mínimo e cancelamento no MySQL.
 └── WhatsAppLinkServiceTest.java  # Testa links, mensagens, configuração e abertura assíncrona do WhatsApp.
 ```
 

@@ -335,7 +335,17 @@ public class AdminDashboardController implements TelaAutenticada {
                 if(p.pixReal())cancelar.setTooltip(new Tooltip("Estornos de PIX real devem ser tratados no Mercado Pago."));
                 Button chamar=botao("Chamar no WhatsApp",()->chamarCliente(p,p.status(),p.nomeEntregador()),"button-secondary");
                 chamar.setDisable(p.telefone()==null||p.telefone().isBlank());
-                HBox linha=new HBox(10,info,avancar,cancelar,chamar);linha.setAlignment(Pos.CENTER_LEFT);linha.getStyleClass().add("admin-card");conteudo.getChildren().add(linha);
+                VBox dados = new VBox(8, info); HBox.setHgrow(dados, Priority.ALWAYS);
+                if (!p.detalhesPreparo().isEmpty()) {
+                    VBox preparo = new VBox(6, texto("ATENÇÃO AO PREPARO", "preparo-titulo"));
+                    preparo.getStyleClass().add("preparo-destaque");
+                    for (String detalhe : p.detalhesPreparo()) {
+                        Label instrucoes = texto(detalhe, "preparo-instrucoes"); instrucoes.setWrapText(true);
+                        preparo.getChildren().add(instrucoes);
+                    }
+                    dados.getChildren().add(preparo);
+                }
+                HBox linha=new HBox(10,dados,avancar,cancelar,chamar);linha.setAlignment(Pos.CENTER_LEFT);linha.getStyleClass().add("admin-card");conteudo.getChildren().add(linha);
             }
         });
     }
@@ -384,7 +394,15 @@ public class AdminDashboardController implements TelaAutenticada {
         },"button-primary");alternar.setId("loja-alternar");
         Label regra=texto("O fechamento manual pausa pedidos imediatos. Para abrir fora do expediente, desative o horário automático. Encomendas futuras continuam sujeitas ao expediente.","subtitle");
         regra.setWrapText(true);
-        VBox painel=new VBox(10,status,regra,new HBox(12,new VBox(4,new Label("Abertura"),abertura),new VBox(4,new Label("Fechamento"),fechamento)),automatico,new HBox(10,salvar,alternar));
+        TextField minimo = campo(config.pedidoMinimoEntrega().toPlainString(), "20,00"); minimo.setId("loja-pedido-minimo");
+        Button salvarMinimo = botao("Salvar mínimo", () -> {
+            try {
+                BigDecimal valor = decimal(minimo.getText());
+                executar(() -> { operacaoLoja.definirPedidoMinimo(valor); return null; }, x -> statusLoja());
+            } catch (IllegalArgumentException e) { avisar(Alert.AlertType.WARNING, "Valor inválido", "Informe o mínimo em reais, por exemplo 20,00."); }
+        }, "button-secondary");
+        VBox painel=new VBox(10,status,regra,new HBox(12,new VBox(4,new Label("Abertura"),abertura),new VBox(4,new Label("Fechamento"),fechamento)),automatico,new HBox(10,salvar,alternar),
+                new Label("Pedido mínimo para entrega (R$, sem frete)"), new HBox(10, minimo, salvarMinimo));
         painel.getStyleClass().add("admin-card");conteudo.getChildren().setAll(painel);
     }
 
@@ -421,18 +439,59 @@ public class AdminDashboardController implements TelaAutenticada {
         TextField minimo=campo(atual==null?"0":atual.getEstoqueMinimo().toPlainString(),"Estoque mínimo");TextField imagem=campo(atual==null?"":atual.getUrlImagem(),"URL ou arquivo da imagem");
         TextField estoqueInterno=campo(atual==null?"0":atual.getEstoqueAtual().stripTrailingZeros().toPlainString(),"Estoque físico");estoqueInterno.setDisable(atual==null);
         Button escolher=botao("Selecionar imagem do computador",()->{FileChooser fc=new FileChooser();fc.setTitle("Selecionar imagem");fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Imagens","*.png","*.jpg","*.jpeg","*.gif"));File arquivo=fc.showOpenDialog(raiz.getScene().getWindow());if(arquivo!=null)imagem.setText(arquivo.toURI().toString());},"button-secondary");
-        ComboBox<Categoria> categoria=new ComboBox<>();categoria.getItems().setAll(categorias);categoria.setPromptText("Categoria (opcional)");categoria.setConverter(new StringConverter<>(){public String toString(Categoria c){return c==null?"Sem categoria":c.getNome();}public Categoria fromString(String s){return null;}});
-        if(atual!=null&&atual.getCategoria()!=null)categorias.stream().filter(c->Objects.equals(c.getId(),atual.getCategoria().getId())).findFirst().ifPresent(categoria::setValue);
+        ComboBox<String> categoria = new ComboBox<>(); categoria.setEditable(true); categoria.setId("produto-categoria");
+        categoria.getItems().setAll(categorias.stream().map(Categoria::getNome).toList());
+        categoria.setPromptText("Selecione ou digite uma categoria");
+        if (atual != null && atual.getCategoria() != null) categoria.setValue(atual.getCategoria().getNome());
+        VBox linhasOpcionais = new VBox(6);
+        Label semOpcionais = texto("Nenhum opcional cadastrado.", "subtitle");
+        semOpcionais.visibleProperty().bind(javafx.beans.binding.Bindings.isEmpty(linhasOpcionais.getChildren()));
+        semOpcionais.managedProperty().bind(semOpcionais.visibleProperty());
+        if (atual != null) atual.getOpcionais().forEach(o -> adicionarLinhaOpcional(linhasOpcionais, o));
+        Button adicionarOpcional = botao("Adicionar opcional", () -> adicionarLinhaOpcional(linhasOpcionais, null), "button-secondary");
         VBox campos=new VBox(8,new Label("Nome"),nome,new Label("Descrição"),descricao,new Label("Categoria"),categoria,new Label("Preço de venda"),preco,new Label("Custo de produção"),custo,new Label("Estoque físico (controle interno)"),estoqueInterno,new Label("Estoque mínimo"),minimo,new Label("Imagem"),escolher,new Label("URL ou caminho (opcional)"),imagem);campos.setPadding(new Insets(10));
-        ScrollPane scroll=new ScrollPane(campos);scroll.setFitToWidth(true);scroll.setPrefViewportHeight(470);dialog.getDialogPane().setContent(scroll);
-        if(dialog.showAndWait().orElse(ButtonType.CANCEL)!=ButtonType.OK)return;
-        try{
-            Produto p=new Produto(atual==null?null:atual.getId(),categoria.getValue(),nome.getText(),descricao.getText(),decimal(preco.getText()),decimal(custo.getText()),atual==null?BigDecimal.ZERO:atual.getEstoqueAtual(),decimal(minimo.getText()),imagem.getText().isBlank()?null:imagem.getText());
-            if(atual!=null)p.setFichaVitrine(atual.getFichaVitrine());
-            BigDecimal digitado=decimal(estoqueInterno.getText());
-            BigDecimal ajuste=atual==null||digitado.compareTo(atual.getEstoqueAtual())==0?null:digitado;
-            executar(()->{if(atual==null)produtos.cadastrar(p);else if(!produtos.atualizar(p,ajuste))throw new IllegalStateException("Produto não encontrado");return null;},x->estoque());
-        }catch(RuntimeException e){avisar(Alert.AlertType.WARNING,"Dados inválidos",e instanceof IllegalArgumentException&&e.getMessage()!=null?e.getMessage():"Confira nome, preços, custo e estoque.");}
+        Label ajuda = texto("Repita o nome do grupo, o número de escolhas grátis e o máximo em cada opção do mesmo grupo.", "subtitle"); ajuda.setWrapText(true);
+        campos.getChildren().addAll(new Label("Bordas e adicionais"), ajuda, semOpcionais, linhasOpcionais, adicionarOpcional);
+        ScrollPane scroll=new ScrollPane(campos);scroll.setFitToWidth(true);scroll.setPrefViewportHeight(470);scroll.setPrefViewportWidth(660);dialog.getDialogPane().setContent(scroll);
+        dialog.getDialogPane().lookupButton(ButtonType.OK).addEventFilter(javafx.event.ActionEvent.ACTION, evento -> {
+            try{
+                Produto p=new Produto(atual==null?null:atual.getId(),null,nome.getText(),descricao.getText(),decimal(preco.getText()),decimal(custo.getText()),atual==null?BigDecimal.ZERO:atual.getEstoqueAtual(),decimal(minimo.getText()),imagem.getText().isBlank()?null:imagem.getText());
+                if(atual!=null)p.setFichaVitrine(atual.getFichaVitrine());
+                BigDecimal digitado=decimal(estoqueInterno.getText());
+                BigDecimal ajuste=atual==null||digitado.compareTo(atual.getEstoqueAtual())==0?null:digitado;
+                p.setOpcionais(linhasOpcionais.getChildren().stream().map(LinhaOpcional.class::cast).map(LinhaOpcional::opcional).toList());
+                ProdutoPersonalizacaoService.validarCatalogo(p.getOpcionais());
+                String categoriaDigitada = categoria.getEditor().getText();
+                executar(()->{produtos.salvarCatalogo(p,categoriaDigitada,ajuste);return null;},x->estoque());
+            }catch(IllegalArgumentException e){evento.consume();avisar(Alert.AlertType.WARNING,"Dados inválidos",e.getMessage());}
+        });
+        dialog.showAndWait();
+    }
+    private void adicionarLinhaOpcional(VBox linhas, ProdutoOpcional opcional) {
+        LinhaOpcional linha = new LinhaOpcional(opcional);
+        linha.getChildren().add(botao("Remover", () -> linhas.getChildren().remove(linha), "button-outline"));
+        linhas.getChildren().add(linha);
+    }
+    private static final class LinhaOpcional extends HBox {
+        private final TextField grupo, nome, preco, gratis, maximo;
+        LinhaOpcional(ProdutoOpcional o) {
+            super(6);
+            grupo = campo(o == null ? "" : o.grupoNome(), "Grupo");
+            nome = campo(o == null ? "" : o.nome(), "Nome");
+            preco = campo(o == null ? "0,00" : o.precoAdicional().toPlainString(), "Preço");
+            gratis = campo(o == null ? "0" : Integer.toString(o.gratisAteLimite()), "Grátis");
+            maximo = campo(o == null ? "1" : Integer.toString(o.maximoEscolhas()), "Máximo");
+            grupo.setPrefColumnCount(12); nome.setPrefColumnCount(12); preco.setPrefColumnCount(5); gratis.setPrefColumnCount(3); maximo.setPrefColumnCount(3);
+            setAlignment(Pos.BOTTOM_LEFT);
+            getChildren().addAll(new VBox(3,new Label("Grupo"),grupo), new VBox(3,new Label("Opção"),nome),
+                    new VBox(3,new Label("Preço (R$)"),preco), new VBox(3,new Label("Grátis"),gratis), new VBox(3,new Label("Máximo"),maximo));
+        }
+        ProdutoOpcional opcional() {
+            int franquia, limite;
+            try { franquia = Integer.parseInt(gratis.getText().strip()); limite = Integer.parseInt(maximo.getText().strip()); }
+            catch (NumberFormatException e) { throw new IllegalArgumentException("Informe valores inteiros para a franquia e o máximo de escolhas."); }
+            return new ProdutoOpcional(null, grupo.getText(), nome.getText(), decimal(preco.getText()), franquia, limite);
+        }
     }
     private void entradaLote(Produto produto,List<Contato> contatos){
         if(produto==null)return;List<Fornecedor> fornecedores=contatos.stream().filter(Fornecedor.class::isInstance).map(Fornecedor.class::cast).toList();

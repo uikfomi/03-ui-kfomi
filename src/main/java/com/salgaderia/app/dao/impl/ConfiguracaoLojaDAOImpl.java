@@ -13,7 +13,7 @@ public final class ConfiguracaoLojaDAOImpl implements ConfiguracaoLojaDAO {
             if (!rs.next()) throw new SQLException("Configuração operacional da loja não encontrada.");
             return new ConfiguracaoLoja(rs.getBoolean("aberta_manualmente"),
                     rs.getObject("horario_abertura", LocalTime.class), rs.getObject("horario_fechamento", LocalTime.class),
-                    rs.getBoolean("respeitar_horario_automatico"));
+                    rs.getBoolean("respeitar_horario_automatico"), rs.getBigDecimal("pedido_minimo_entrega"));
         }
     }
     @Override public void salvarExpediente(Connection c, ConfiguracaoLoja config) throws SQLException {
@@ -21,6 +21,12 @@ public final class ConfiguracaoLojaDAOImpl implements ConfiguracaoLojaDAO {
             ps.setObject(1, config.abertura()); ps.setObject(2, config.fechamento());
             ps.setBoolean(3, config.respeitarHorarioAutomatico());
             if (ps.executeUpdate() != 1) throw new SQLException("Expediente não atualizado.");
+        }
+    }
+    @Override public void definirPedidoMinimo(Connection c, java.math.BigDecimal valor) throws SQLException {
+        try (var ps = c.prepareStatement("UPDATE configuracao_loja SET pedido_minimo_entrega=? WHERE id=1")) {
+            ps.setBigDecimal(1, valor);
+            if (ps.executeUpdate() != 1) throw new SQLException("Pedido mínimo não atualizado.");
         }
     }
     @Override public void definirAberturaManual(Connection c, boolean aberta) throws SQLException {

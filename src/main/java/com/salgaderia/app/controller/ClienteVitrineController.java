@@ -54,7 +54,7 @@ public class ClienteVitrineController implements TelaAutenticada {
     @FXML private Label saudacao, mensagemProdutos, mensagemPedidos, endereco, total, contador;
     @FXML private TextField busca, cupom;
     @FXML private Label mensagemDesconto;
-    @FXML private Label mensagemFrete,cupomUrgente,statusLoja,orientacaoLoja;
+    @FXML private Label mensagemFrete,cupomUrgente,statusLoja,orientacaoLoja,mensagemMinimo;
     @FXML private VBox dadosPagadorPix;
     @FXML private TextField emailPix,documentoPix;
     @FXML private ComboBox<FiltroCategoria> categorias;
@@ -128,11 +128,11 @@ public class ClienteVitrineController implements TelaAutenticada {
     private record FiltroCategoria(Long id,String nome) { }
     private record ChaveCarrinho(Long produtoId, UUID grupo) {
         static ChaveCarrinho de(PedidoItem item) {
-            return item.getPersonalizacao()==null?new ChaveCarrinho(item.getProduto().getId(),null)
-                    :new ChaveCarrinho(null,item.getPersonalizacao().grupo());
+            if (item.getPersonalizacao() != null) return new ChaveCarrinho(null,item.getPersonalizacao().grupo());
+            return new ChaveCarrinho(item.getProduto().getId(),item.detalhesPreparo().isEmpty() ? null : UUID.randomUUID());
         }
     }
-    private record Catalogo(List<Produto> produtos,Map<Long,BigDecimal> medias,List<AvaliacaoFoto> fotos) { }
+    private record Catalogo(List<Produto> produtos,List<Categoria> categorias,Map<Long,BigDecimal> medias,List<AvaliacaoFoto> fotos) { }
     private record Historico(List<Pedido> pedidos,long fila) { }
     private record DadosClube(ClubeService.Vitrine clube,GamificacaoService.Perfil gamificacao) { }
 
@@ -212,7 +212,11 @@ public class ClienteVitrineController implements TelaAutenticada {
         boolean fechada=configuracao!=null&&!operacao.estaAberta(configuracao);
         if(fechada&&!agendar.isSelected())exibir(orientacaoLoja,"Pedidos imediatos pausados. Agende para um horário dentro do expediente.");
         else ocultar(orientacaoLoja);
-        finalizar.setDisable(descontoAtual==null||formaPagamento.getValue()==null||configuracao==null||(fechada&&!agendar.isSelected()));
+        BigDecimal falta = configuracao == null || carrinho.isEmpty() ? BigDecimal.ZERO
+                : OperacaoLojaService.faltaParaEntrega(configuracao, modalidade(), itensDoCarrinho());
+        if (falta.signum() > 0) exibir(mensagemMinimo,"Adicione mais " + moeda(falta) + " para atingir o mínimo de entrega, sem frete.");
+        else ocultar(mensagemMinimo);
+        finalizar.setDisable(descontoAtual==null||formaPagamento.getValue()==null||configuracao==null||(fechada&&!agendar.isSelected())||falta.signum()>0);
     }
     @FXML private void mostrarVitrine(){atualizacaoPedidos.stop();geracaoPedidos++;mostrarPainel(painelVitrine);simularDesconto();}
     @FXML private void mostrarPedidos(){mostrarPainel(painelPedidos);carregarPedidos();atualizacaoPedidos.playFromStart();}
@@ -313,13 +317,13 @@ public class ClienteVitrineController implements TelaAutenticada {
     @FXML private void carregarProdutos(){
         long geracao=++geracaoProdutos;carregouProdutos=false;cards.getChildren().clear();exibir(mensagemProdutos,"Carregando produtos...");
         galeriaFotos.getChildren().clear();exibir(mensagemFotos,"Carregando fotos de avaliações…");
-        Task<Catalogo> tarefa=new Task<>() { @Override protected Catalogo call(){return new Catalogo(produtosService.listar(),avaliacoesService.mediasPorProduto(),avaliacoesService.fotosRecentes());} };
+        Task<Catalogo> tarefa=new Task<>() { @Override protected Catalogo call(){return new Catalogo(produtosService.listar(),produtosService.listarCategoriasAtivas(),avaliacoesService.mediasPorProduto(),avaliacoesService.fotosRecentes());} };
         tarefa.setOnSucceeded(e->{
             if(geracao!=geracaoProdutos)return;
             produtos=List.copyOf(tarefa.getValue().produtos());medias=Map.copyOf(tarefa.getValue().medias());carregouProdutos=true;
             Long selecionada=categorias.getValue()==null?null:categorias.getValue().id();
             List<FiltroCategoria> filtros=new ArrayList<>();filtros.add(new FiltroCategoria(null,"Todas as categorias"));
-            produtos.stream().map(Produto::getCategoria).filter(Objects::nonNull).collect(java.util.stream.Collectors.toMap(Categoria::getId,c->c,(a,b)->a,LinkedHashMap::new)).values().stream()
+            tarefa.getValue().categorias().stream()
                     .sorted(Comparator.comparing(Categoria::getNome,String.CASE_INSENSITIVE_ORDER)).forEach(c->filtros.add(new FiltroCategoria(c.getId(),c.getNome())));
             categorias.getItems().setAll(filtros);categorias.setValue(filtros.stream().filter(f->Objects.equals(f.id(),selecionada)).findFirst().orElse(filtros.get(0)));
             Map<Long,Produto> atuais=new HashMap<>();produtos.forEach(p->atuais.put(p.getId(),p));
@@ -373,12 +377,71 @@ public class ClienteVitrineController implements TelaAutenticada {
         boolean disponivel=produto.isDisponivelVenda();
         Label estoque=new Label(disponivel?"Disponível":"Indisponível no momento");estoque.setWrapText(true);
         estoque.getStyleClass().add(disponivel?"estoque-disponivel":"estoque-esgotado");
-        Button adicionar=new Button("Adicionar +");adicionar.setId("adicionar-"+produto.getId());adicionar.getStyleClass().add("button-primary");adicionar.setMaxWidth(Double.MAX_VALUE);adicionar.setDisable(!disponivel);adicionar.setOnAction(e->adicionar(produto));
+        boolean temOpcionais = !produto.getOpcionais().isEmpty();
+        Button adicionar=new Button(temOpcionais ? "Escolher opcionais" : "Adicionar +");adicionar.setId("adicionar-"+produto.getId());adicionar.getStyleClass().add("button-primary");adicionar.setMaxWidth(Double.MAX_VALUE);adicionar.setDisable(!disponivel);
+        adicionar.setOnAction(e->{if (temOpcionais) personalizarProduto(produto); else alterarQuantidade(produto,1);});
+        Button observacao = new Button("Adicionar com observação"); observacao.getStyleClass().add("button-secondary");
+        observacao.setId("observar-"+produto.getId()); observacao.setMaxWidth(Double.MAX_VALUE); observacao.setDisable(!disponivel);
+        observacao.setOnAction(e->personalizarProduto(produto));
+        card.setOnMouseClicked(e -> {
+            if (!disponivel || e.getButton() != javafx.scene.input.MouseButton.PRIMARY || !(e.getTarget() instanceof Node alvo)) return;
+            for (Node atual = alvo; atual != null && atual != card; atual = atual.getParent()) {
+                if (atual instanceof ButtonBase) return;
+            }
+            personalizarProduto(produto);
+        });
         HBox info=new HBox(8,estrelas,estoque);info.setAlignment(Pos.CENTER_LEFT);
-        card.getChildren().addAll(imagem,nome,descricao,preco,info,adicionar);return card;
+        card.getChildren().addAll(imagem,nome,descricao,preco,info,adicionar);
+        if (!temOpcionais) card.getChildren().add(observacao);
+        return card;
     }
-    private void adicionar(Produto produto){
-        alterarQuantidade(produto,1);
+    private void personalizarProduto(Produto produto) {
+        ButtonType incluir = new ButtonType("Adicionar ao carrinho", ButtonBar.ButtonData.OK_DONE);
+        Dialog<ButtonType> dialog = personalizar(produto.getNome(), incluir);
+        dialog.getDialogPane().setId("personalizar-produto");
+        List<ProdutoOpcional> catalogo = produto.getOpcionais();
+        Map<Long, CheckBox> escolhas = new LinkedHashMap<>();
+        VBox campos = new VBox(9); campos.setPadding(new Insets(10));
+        Map<String,List<ProdutoOpcional>> grupos = new LinkedHashMap<>();
+        catalogo.forEach(o -> grupos.computeIfAbsent(o.grupoNome(), g -> new ArrayList<>()).add(o));
+        for (var grupo : grupos.entrySet()) {
+            var regra = grupo.getValue().get(0);
+            campos.getChildren().add(textoClube(grupo.getKey() + " · até " + regra.maximoEscolhas()
+                    + (regra.gratisAteLimite() == 0 ? "" : " · " + regra.gratisAteLimite() + " com preço dispensado por ordem da lista")));
+            for (var opcao : grupo.getValue()) {
+                CheckBox escolha = new CheckBox(opcao.nome() + (opcao.precoAdicional().signum() == 0 ? " · grátis" : " · +" + moeda(opcao.precoAdicional())));
+                escolha.setId("opcional-" + opcao.id());
+                escolha.setWrapText(true);
+                escolhas.put(opcao.id(), escolha); campos.getChildren().add(escolha);
+            }
+        }
+        TextArea observacao = new TextArea(); observacao.setId("produto-observacao");
+        observacao.setPromptText("Ex: sem cebola, bem assado"); observacao.setWrapText(true); observacao.setPrefRowCount(3);
+        observacao.setTextFormatter(new TextFormatter<>(alteracao -> alteracao.getControlNewText().length() <= 512 ? alteracao : null));
+        Label previa = textoClube("");
+        Runnable atualizar = () -> {
+            Set<Long> selecionadas = marcados(escolhas);
+            for (var lista : grupos.values()) {
+                long quantidade = lista.stream().filter(o -> selecionadas.contains(o.id())).count();
+                for (var o : lista) escolhas.get(o.id()).setDisable(!selecionadas.contains(o.id()) && quantidade >= o.maximoEscolhas());
+            }
+            try {
+                PedidoItem item = ProdutoPersonalizacaoService.montar(produto, catalogo, selecionadas, observacao.getText(), BigDecimal.ONE);
+                previa.setText("Preço unitário: " + moeda(item.getPrecoUnitario()));
+                dialog.getDialogPane().lookupButton(incluir).setDisable(false);
+            } catch (IllegalArgumentException e) {
+                previa.setText(e.getMessage()); dialog.getDialogPane().lookupButton(incluir).setDisable(true);
+            }
+        };
+        escolhas.values().forEach(c -> c.selectedProperty().addListener((o,a,n)->atualizar.run()));
+        campos.getChildren().addAll(new Label("Observação para a cozinha (opcional)"), observacao, previa);
+        ScrollPane scroll = new ScrollPane(campos); scroll.setFitToWidth(true); scroll.setPrefViewportWidth(390);
+        scroll.setPrefViewportHeight(Math.min(420, 155 + grupos.size()*32 + catalogo.size()*34));
+        dialog.getDialogPane().setContent(scroll); atualizar.run();
+        if (dialog.showAndWait().orElse(ButtonType.CANCEL) != incluir) return;
+        PedidoItem item = ProdutoPersonalizacaoService.montar(produto, catalogo, marcados(escolhas), observacao.getText(), BigDecimal.ONE);
+        if (item.detalhesPreparo().isEmpty()) alterarQuantidade(produto,1);
+        else adicionarPersonalizado(List.of(item));
     }
     private void alterarQuantidade(Produto produto,int delta){
         ChaveCarrinho chave=new ChaveCarrinho(produto.getId(),null);
@@ -517,8 +580,10 @@ public class ClienteVitrineController implements TelaAutenticada {
             Label nome=new Label(personalizado?primeiro.getObservacaoPersonalizada():p.getNome());nome.setWrapText(true);nome.getStyleClass().add("carrinho-nome");
             Label subtotal=new Label(moeda(preco));subtotal.getStyleClass().add("subtitle");
             VBox detalhes=new VBox(4,nome,subtotal);HBox.setHgrow(detalhes,Priority.ALWAYS);
+            boolean preparo = !primeiro.detalhesPreparo().isEmpty();
+            if (preparo) detalhes.getChildren().add(textoClube(primeiro.getQuantidade().stripTrailingZeros().toPlainString() + " ×\n" + primeiro.detalhesPreparo()));
             HBox linha=new HBox(7,detalhes);
-            if(personalizado){
+            if(personalizado || preparo){
                 Button remover=new Button("Remover");remover.setOnAction(e->{carrinho.remove(entrada.getKey());atualizarCarrinho();});
                 linha.getChildren().add(remover);
             }else{
@@ -542,7 +607,7 @@ public class ClienteVitrineController implements TelaAutenticada {
         return new Pedido(null,usuario,usuario.getCliente(),StatusPedido.PENDENTE,tipo,enderecoEntrega,LocalDateTime.now(),itensDoCarrinho());
     }
     private void simularDesconto(){
-        long geracao=++geracaoDesconto;descontoAtual=null;finalizar.setDisable(true);
+        long geracao=++geracaoDesconto;descontoAtual=null;atualizarCheckout();
         atualizarPix();
         ocultar(mensagemFrete);
         if(usuario==null||carrinho.isEmpty()){mensagemDesconto.setText("");return;}
@@ -614,6 +679,7 @@ public class ClienteVitrineController implements TelaAutenticada {
         try {
             if(configuracao==null)throw new IllegalArgumentException("Não foi possível verificar se a loja está aberta. Tente novamente.");
             operacao.validarPedido(configuracao,pedido.getAgendadoPara());
+            if (OperacaoLojaService.faltaParaEntrega(configuracao, tipo, pedido.getItens()).signum() > 0) { atualizarCheckout(); return; }
         }catch(IllegalArgumentException erro){avisar(Alert.AlertType.WARNING,"Pedido não finalizado",erro.getMessage());return;}
         raiz.setDisable(true);
         ResultadoDesconto esperado=descontoAtual;String codigo=cupom.getText();
@@ -640,7 +706,7 @@ public class ClienteVitrineController implements TelaAutenticada {
         if(inicial){listaPedidos.getChildren().clear();exibir(mensagemPedidos,"Carregando seus pedidos...");}
         Task<Historico> tarefa=new Task<>() { @Override protected Historico call(){return new Historico(pedidosService.listarDoCliente(usuario),pedidosService.contarFilaCozinha());} };
         tarefa.setOnSucceeded(e->{consultaPedidosEmAndamento=false;if(geracao!=geracaoPedidos)return;List<Pedido> pedidos=tarefa.getValue().pedidos();
-            if(pedidos.isEmpty()){exibir(mensagemPedidos,"Você ainda não fez nenhum pedido.");return;}
+            if(pedidos.isEmpty()){listaPedidos.getChildren().clear();exibir(mensagemPedidos,"Você ainda não fez nenhum pedido.");return;}
             ocultar(mensagemPedidos);listaPedidos.getChildren().setAll(pedidos.stream().map(p->cardPedido(p,tarefa.getValue().fila())).toList());
         });
         tarefa.setOnFailed(e->{consultaPedidosEmAndamento=false;if(geracao==geracaoPedidos)exibir(mensagemPedidos,"Não foi possível atualizar seus pedidos. Verifique a conexão e tente novamente.");});iniciar(tarefa);
@@ -648,7 +714,7 @@ public class ClienteVitrineController implements TelaAutenticada {
     private Node cardPedido(Pedido pedido,long fila){
         VBox card=new VBox(10);card.getStyleClass().add("pedido-card");
         Label numero=new Label("Pedido #"+pedido.getId()+"  ·  "+pedido.getCriadoEm().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")));numero.getStyleClass().add("pedido-titulo");
-        Label status=new Label(pedido.getStatus().name());status.getStyleClass().addAll("status-pedido","status-"+pedido.getStatus().name().toLowerCase(Locale.ROOT));
+        Label status=new Label(pedido.getStatus()==StatusPedido.PENDENTE?"Aguardando confirmação":pedido.getStatus().name());status.getStyleClass().addAll("status-pedido","status-"+pedido.getStatus().name().toLowerCase(Locale.ROOT));
         Region espaco=new Region();HBox.setHgrow(espaco,Priority.ALWAYS);HBox topo=new HBox(8,numero,espaco,status);topo.setAlignment(Pos.CENTER_LEFT);card.getChildren().add(topo);
         var etapa=EtapaCozinha.de(pedido.getStatus());
         ProgressBar termometro=new ProgressBar(etapa.progresso());termometro.setMaxWidth(Double.MAX_VALUE);
@@ -672,7 +738,9 @@ public class ClienteVitrineController implements TelaAutenticada {
             if(grupo!=null&&grupo.tipo().caixa()&&pedido.getStatus()!=StatusPedido.ENTREGUE)continue;
             Label descricao=new Label(item.getQuantidade().stripTrailingZeros().toPlainString()+" × "+item.getProduto().getNome()+"  ·  "+moeda(item.calcularSubtotal()));descricao.setWrapText(true);HBox.setHgrow(descricao,Priority.ALWAYS);
             Button avaliar=new Button("Avaliar produto");avaliar.setId("avaliar-"+pedido.getId()+"-"+item.getProduto().getId());avaliar.getStyleClass().add("button-secondary");avaliar.setDisable(pedido.getStatus()!=StatusPedido.ENTREGUE);avaliar.setOnAction(e->avaliar(item.getProduto()));
-            HBox linha=new HBox(8,descricao,avaliar);linha.setAlignment(Pos.CENTER_LEFT);card.getChildren().add(linha);
+            VBox detalhes = new VBox(3, descricao); HBox.setHgrow(detalhes, Priority.ALWAYS);
+            if (!item.detalhesPreparo().isEmpty()) detalhes.getChildren().add(textoClube(item.detalhesPreparo()));
+            HBox linha=new HBox(8,detalhes,avaliar);linha.setAlignment(Pos.CENTER_LEFT);card.getChildren().add(linha);
         }
         Label totalPedido=new Label("Total: "+moeda(pedido.calcularTotal()));totalPedido.getStyleClass().add("produto-preco");
         if(pedido.getTaxaEntrega().signum()>0)card.getChildren().add(textoClube("Taxa de entrega: "+moeda(pedido.getTaxaEntrega())));
@@ -688,7 +756,27 @@ public class ClienteVitrineController implements TelaAutenticada {
         if(pedido.getStatusPagamento()==StatusPagamento.AGUARDANDO_PIX&&pedido.getStatus()==StatusPedido.PENDENTE){
             Button pix=new Button("Ver PIX do pedido");pix.setOnAction(e->{abrirPix(pedido);carregarPedidos();});card.getChildren().add(pix);
         }
+        if (pedido.getStatus() == StatusPedido.PENDENTE) {
+            Button cancelar = new Button("Cancelar Pedido"); cancelar.setId("cancelar-pedido-" + pedido.getId());
+            cancelar.getStyleClass().add("button-secondary"); cancelar.setOnAction(e -> cancelarPedido(pedido.getId()));
+            card.getChildren().add(cancelar);
+        }
         return card;
+    }
+    private void cancelarPedido(long id) {
+        Alert confirmar = new Alert(Alert.AlertType.CONFIRMATION, "Cancelar o pedido #" + id + "?", ButtonType.CANCEL, ButtonType.OK);
+        confirmar.initOwner(raiz.getScene().getWindow()); confirmar.setHeaderText("Cancelar pedido");
+        if (confirmar.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
+        raiz.setDisable(true); UsuarioCliente cliente = usuario;
+        Task<Void> tarefa = new Task<>() { @Override protected Void call() { pedidosService.cancelarDoCliente(cliente,id); return null; } };
+        tarefa.setOnSucceeded(e -> { raiz.setDisable(false); carregarPedidos(); carregarCupons(); });
+        tarefa.setOnFailed(e -> {
+            raiz.setDisable(false); carregarPedidos();
+            Throwable erro = tarefa.getException();
+            avisar(Alert.AlertType.WARNING,"Pedido não cancelado",erro instanceof IllegalArgumentException ? erro.getMessage()
+                    : "Não foi possível cancelar agora. Tente novamente ou entre em contato com a loja.");
+        });
+        iniciar(tarefa);
     }
     private void abrirPix(Pedido pedido){
         UsuarioCliente cliente=usuario;long id=pedido.getId();

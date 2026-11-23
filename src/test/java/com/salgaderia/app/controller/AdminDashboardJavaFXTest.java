@@ -70,9 +70,13 @@ class AdminDashboardJavaFXTest {
         fx(()->{FXMLLoader l=new FXMLLoader(getClass().getResource("/fxml/admin-dashboard.fxml"));l.setControllerFactory(c->painel(new Produtos(produto),vendas,new ComandasTeste()));Parent root=l.load();Stage stage=new Stage();stage.setScene(new Scene(root,1100,700));stage.show();((AdminDashboardController)l.getController()).definirUsuario(new UsuarioAdmin(2L,"Admin","admin","senha",true));loader.set(l);janela.set(stage);return null;});
         try{
             aguardar(()->fx(()->((Label)loader.get().getNamespace().get("badgePendentes")).getText().endsWith("0")));
-            vendas.fila.add(new PedidoFila(123,"Cliente",StatusPedido.PENDENTE,TipoEntrega.RETIRADA,null,LocalDateTime.now(),BigDecimal.TEN,"1 x Coxinha","85999999999"));
+            vendas.fila.add(new PedidoFila(123,"Cliente",StatusPedido.PENDENTE,TipoEntrega.RETIRADA,null,LocalDateTime.now(),BigDecimal.TEN,"1 x Coxinha","85999999999",null,com.salgaderia.app.model.enums.StatusPagamento.NA_ENTREGA,
+                    false,false,null,List.of("1 × Coxinha\nAdicionais: Catupiry\nObservação: sem cebola")));
             aguardar(()->fx(()->((Label)loader.get().getNamespace().get("badgePendentes")).getText().endsWith("1")));
             assertTrue(fx(()->((Label)loader.get().getNamespace().get("avisoPedido")).getText().contains("#123")));
+            fx(()->{((Button)loader.get().getNamespace().get("menuFila")).fire();return null;});
+            aguardar(()->fx(()->janela.get().getScene().getRoot().lookup(".preparo-instrucoes") instanceof Label instrucoes
+                    && instrucoes.getText().contains("Catupiry") && instrucoes.getText().contains("sem cebola")));
         }finally{fx(()->{janela.get().close();return null;});}
     }
     @Test void mostraMesasEPermiteAbrirComanda() throws Exception {
@@ -108,11 +112,14 @@ class AdminDashboardJavaFXTest {
     private static <T>T fx(Callable<T> c)throws Exception{FutureTask<T> t=new FutureTask<>(c);Platform.runLater(t);return t.get(15,TimeUnit.SECONDS);}
     private static void aguardar(Callable<Boolean> c)throws Exception{long fim=System.nanoTime()+TimeUnit.SECONDS.toNanos(8);while(System.nanoTime()<fim){if(c.call())return;Thread.sleep(25);}fail("Operação assíncrona não concluiu");}
     private record Produtos(Produto produto) implements ProdutoEstoqueService {
+        public List<Categoria> listarCategoriasAtivas(){return listarCategorias();}
+        public void salvarCatalogo(Produto p,String c,BigDecimal q){throw new UnsupportedOperationException();}
         public List<Categoria> listarCategorias(){return List.of();}public long cadastrar(Produto p){return 1;}public boolean atualizar(Produto p){return true;}public boolean atualizar(Produto p,BigDecimal q){throw new UnsupportedOperationException();} public boolean alternarDisponibilidade(long id){throw new UnsupportedOperationException();} public boolean excluir(long id){return true;}
         public Optional<Produto> buscarPorId(long id){return Optional.of(produto);}public List<Produto> listar(){return List.of(produto);}public List<Produto> listarEstoqueBaixo(){return List.of();}
         public void entradaLote(long p,long f,BigDecimal q,String o){}public void registrarPerda(long p,BigDecimal q,String o){}
     }
     private static class Vendas implements PedidoVendaService {
+        public void cancelarDoCliente(UsuarioCliente u,long id){throw new UnsupportedOperationException();}
         public long contarFilaCozinha(){return 0;}
         public List<PedidoItem> repetirUltimoPedido(UsuarioCliente u){return List.of();}
         final List<PedidoFila> fila=new java.util.concurrent.CopyOnWriteArrayList<>();

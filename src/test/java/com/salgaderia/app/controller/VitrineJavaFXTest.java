@@ -58,6 +58,7 @@ class VitrineJavaFXTest {
         try {
             FXMLLoader loader=loaderRef.get();
             aguardar(()->fx(()->((FlowPane)loader.getNamespace().get("cards")).getChildren().size()==2));
+            aguardar(()->fx(()->((Label)loader.getNamespace().get("statusLoja")).getText().contains("Loja Aberta")));
             fx(()->{
                 Parent root=stageRef.get().getScene().getRoot();root.applyCss();
                 assertTrue(((Button)root.lookup("#adicionar-2")).isDisabled());
@@ -70,18 +71,21 @@ class VitrineJavaFXTest {
                 assertEquals("2 itens",((Label)loader.getNamespace().get("contador")).getText());
                 assertTrue(((Label)loader.getNamespace().get("total")).getText().contains("16,00"));
                 ((RadioButton)loader.getNamespace().get("entrega")).fire();assertEquals("Rua das Flores",((Label)loader.getNamespace().get("endereco")).getText());
+                assertTrue(((Button)loader.getNamespace().get("finalizar")).isDisabled());
+                assertTrue(((Label)loader.getNamespace().get("mensagemMinimo")).getText().contains("4,00"));
+                ((Button)root.lookup("#adicionar-1")).fire();
                 ((TextField)loader.getNamespace().get("busca")).setText("FRANGO");return null;
             });
             assertEquals(1,fx(()->((FlowPane)loader.getNamespace().get("cards")).getChildren().size()));
             fx(()->{((TextField)loader.getNamespace().get("cupom")).setText("UIKFOMI10");return null;});
-            aguardar(()->fx(()->((Label)loader.getNamespace().get("total")).getText().contains("14,40")));
+            aguardar(()->fx(()->((Label)loader.getNamespace().get("total")).getText().contains("21,60")));
             fx(()->{
                 assertTrue(((Button)loader.getNamespace().get("finalizar")).isDisabled());
                 @SuppressWarnings("unchecked") ComboBox<FormaPagamento> pagamento=(ComboBox<FormaPagamento>)loader.getNamespace().get("formaPagamento");
                 assertEquals(List.of(FormaPagamento.PIX,FormaPagamento.DINHEIRO,FormaPagamento.CARTAO),List.copyOf(pagamento.getItems()));
                 pagamento.setValue(FormaPagamento.PIX);
                 var pix=(com.salgaderia.app.util.PixPainel)loader.getNamespace().get("pixCheckout");
-                assertTrue(pix.isVisible());assertTrue(((Label)pix.getChildren().get(0)).getText().contains("14,40"));
+                assertTrue(pix.isVisible());assertTrue(((Label)pix.getChildren().get(0)).getText().contains("21,60"));
                 assertTrue(pix.lookup("#pix-copiar").isVisible());
                 pagamento.setValue(FormaPagamento.CARTAO);assertFalse(((Button)loader.getNamespace().get("finalizar")).isDisabled());return null;
             });
@@ -108,7 +112,7 @@ class VitrineJavaFXTest {
             assertEquals(FormaPagamento.CARTAO,pedidos.enviado.get().getFormaPagamento());
             assertEquals("UIKFOMI10",pedidos.codigo.get());
             assertEquals("Rua das Flores",pedidos.enviado.get().getEnderecoEntrega());
-            assertEquals(new BigDecimal("2"),pedidos.enviado.get().getItens().get(0).getQuantidade());
+            assertEquals(new BigDecimal("3"),pedidos.enviado.get().getItens().get(0).getQuantidade());
             aguardar(()->fx(()->stageRef.get().getScene().getRoot().lookup("#avaliar-102-1")!=null));
             fx(()->{
                 Parent root=stageRef.get().getScene().getRoot();
@@ -176,6 +180,47 @@ class VitrineJavaFXTest {
             assertEquals(0,fx(()->((FlowPane)loaderRef.get().getNamespace().get("cards")).getChildren().size()));
         } finally {fx(()->{stageRef.get().close();return null;});}
     }
+    @Test void vitrineCarregaCategoriaEAbrePersonalizacaoComLimite() throws Exception {
+        var categoria = new Categoria(33L,"Pizzas artesanais",null);
+        var pizza = new Produto(30L,categoria,"Pizza",null,BigDecimal.TEN,BigDecimal.ONE,BigDecimal.ZERO,BigDecimal.ZERO,null);
+        pizza.setOpcionais(List.of(new ProdutoOpcional(31L,"Borda Recheada","Cheddar",new BigDecimal("3"),0,1),
+                new ProdutoOpcional(32L,"Borda Recheada","Catupiry",new BigDecimal("4"),0,1)));
+        var stage = new java.util.concurrent.atomic.AtomicReference<Stage>();
+        var loader = new java.util.concurrent.atomic.AtomicReference<FXMLLoader>();
+        try {
+            fx(()->{
+                var l = new FXMLLoader(getClass().getResource("/fxml/cliente-vitrine.fxml"));
+                l.setControllerFactory(c->vitrineTeste(new ProdutosTeste(List.of(pizza)),new PedidosTeste(List.of()),new AvaliacoesTeste()));
+                Stage janela = new Stage(); janela.setScene(new Scene(l.load(),1100,800)); janela.show();
+                loader.set(l); stage.set(janela);
+                var cliente = new Cliente(10L,"Ana",null,null,null,null,null);
+                ((ClienteVitrineController)l.getController()).definirUsuario(new UsuarioCliente(20L,"Ana","ana","senha",true,cliente));
+                return null;
+            });
+            aguardar(()->fx(()->stage.get().getScene().getRoot().lookup("#adicionar-30")!=null));
+            fx(()->{
+                var filtro = (ComboBox<?>) loader.get().getNamespace().get("categorias");
+                assertEquals(2,filtro.getItems().size());
+                filtro.getSelectionModel().select(1);
+                assertTrue(filtro.getValue().toString().contains(categoria.getNome()));
+                Platform.runLater(()->((Button)stage.get().getScene().getRoot().lookup("#adicionar-30")).fire());
+                return null;
+            });
+            aguardar(()->fx(()->dialogoAberto(stage.get()).map(p->p.lookup("#produto-observacao")!=null).orElse(false)));
+            fx(()->{
+                var pane = dialogoAberto(stage.get()).orElseThrow();
+                ((CheckBox)pane.lookup("#opcional-31")).fire();
+                assertTrue(pane.lookup("#opcional-32").isDisabled());
+                ((TextArea)pane.lookup("#produto-observacao")).setText("bem assada");
+                confirmar(pane); return null;
+            });
+            aguardar(()->fx(()->((Label)loader.get().getNamespace().get("total")).getText().contains("13,00")));
+            assertTrue(fx(()->((javafx.scene.layout.VBox)loader.get().getNamespace().get("itensCarrinho")).lookupAll(".label").stream()
+                    .filter(Label.class::isInstance).map(Label.class::cast).anyMatch(l->l.getText().contains("Observação: bem assada"))));
+        } finally {
+            fx(()->{if (stage.get()!=null) { dialogoAberto(stage.get()).ifPresent(p->p.getScene().getWindow().hide()); stage.get().close(); } return null;});
+        }
+    }
     @Test void meusPedidosAtualizaStatusAutomaticamente() throws Exception {
         Categoria categoria=new Categoria(1L,"Fritos",null);
         Produto produto=new Produto(1L,categoria,"Coxinha",null,BigDecimal.TEN,BigDecimal.ONE,BigDecimal.TEN,BigDecimal.ONE,null);
@@ -186,11 +231,12 @@ class VitrineJavaFXTest {
         var loaderRef=new java.util.concurrent.atomic.AtomicReference<FXMLLoader>();var stageRef=new java.util.concurrent.atomic.AtomicReference<Stage>();
         fx(()->{FXMLLoader loader=new FXMLLoader(getClass().getResource("/fxml/cliente-vitrine.fxml"));loader.setControllerFactory(c->vitrineTeste(new ProdutosTeste(List.of()),new PedidosTeste(lista),new AvaliacoesTeste()));Parent root=loader.load();Stage stage=new Stage();stage.setScene(new Scene(root,1000,700));stage.show();((ClienteVitrineController)loader.getController()).definirUsuario(usuario);loaderRef.set(loader);stageRef.set(stage);((Button)loader.getNamespace().get("botaoPedidos")).fire();return null;});
         try{
-            aguardar(()->fx(()->stageRef.get().getScene().getRoot().lookup(".status-pendente")!=null));
+            aguardar(()->fx(()->stageRef.get().getScene().getRoot().lookup("#cancelar-pedido-101")!=null));
             Pedido emRota=new Pedido(101L,usuario,cliente,StatusPedido.SAIU_ENTREGA,TipoEntrega.ENTREGA,"Rua das Flores",LocalDateTime.now(),
                     List.of(new PedidoItem(null,produto,BigDecimal.ONE,BigDecimal.TEN)));
             emRota.setNomeEntregador("João");lista.set(0,emRota);
             aguardar(()->fx(()->stageRef.get().getScene().getRoot().lookup("#entrega-em-rota-101") instanceof Label l&&l.getText().contains("João")));
+            assertNull(fx(()->stageRef.get().getScene().getRoot().lookup("#cancelar-pedido-101")));
             assertNotNull(fx(()->stageRef.get().getScene().getRoot().lookup("#whatsapp-pedido-101")));
         }finally{fx(()->{stageRef.get().close();return null;});}
     }
@@ -359,11 +405,14 @@ class VitrineJavaFXTest {
     private static <T> T fx(Callable<T> c) throws Exception{FutureTask<T> t=new FutureTask<>(c);Platform.runLater(t);return t.get(15,TimeUnit.SECONDS);}
     private static void aguardar(Callable<Boolean> condicao) throws Exception{long fim=System.nanoTime()+TimeUnit.SECONDS.toNanos(8);while(System.nanoTime()<fim){if(condicao.call())return;Thread.sleep(25);}fail("Operação assíncrona não concluiu");}
     private record ProdutosTeste(List<Produto> dados) implements ProdutoEstoqueService {
-        public List<Categoria> listarCategorias(){return List.of();} public List<Produto> listar(){return dados;}public List<Produto> listarEstoqueBaixo(){return List.of();}public Optional<Produto> buscarPorId(long id){return dados.stream().filter(p->p.getId()==id).findFirst();}
+        public List<Categoria> listarCategorias(){return listarCategoriasAtivas();}
+        public List<Categoria> listarCategoriasAtivas(){return dados.stream().map(Produto::getCategoria).filter(java.util.Objects::nonNull).distinct().toList();}
+        public void salvarCatalogo(Produto p,String c,BigDecimal q){throw new UnsupportedOperationException();} public List<Produto> listar(){return dados;}public List<Produto> listarEstoqueBaixo(){return List.of();}public Optional<Produto> buscarPorId(long id){return dados.stream().filter(p->p.getId()==id).findFirst();}
         public long cadastrar(Produto p){throw new UnsupportedOperationException();}public boolean atualizar(Produto p){throw new UnsupportedOperationException();}public boolean atualizar(Produto p,BigDecimal q){throw new UnsupportedOperationException();} public boolean alternarDisponibilidade(long id){throw new UnsupportedOperationException();} public boolean excluir(long id){throw new UnsupportedOperationException();}
         public void entradaLote(long p,long f,BigDecimal q,String o){throw new UnsupportedOperationException();}public void registrarPerda(long p,BigDecimal q,String o){throw new UnsupportedOperationException();}
     }
     private static class PedidosTeste implements PedidoVendaService {
+        public void cancelarDoCliente(UsuarioCliente u,long id){throw new UnsupportedOperationException();}
         public long contarFilaCozinha(){return 0;}
         public List<PedidoItem> repetirUltimoPedido(UsuarioCliente u){return dados.stream().filter(p->p.getStatus()==StatusPedido.ENTREGUE).findFirst().orElseThrow().getItens();}
         final List<Pedido> dados;final java.util.concurrent.atomic.AtomicReference<Pedido> enviado=new java.util.concurrent.atomic.AtomicReference<>();final java.util.concurrent.atomic.AtomicReference<String> codigo=new java.util.concurrent.atomic.AtomicReference<>();

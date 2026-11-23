@@ -3,6 +3,12 @@ package com.salgaderia.app.service;
 import com.salgaderia.app.dao.ConfiguracaoLojaDAO;
 import com.salgaderia.app.dao.impl.ConfiguracaoLojaDAOImpl;
 import com.salgaderia.app.model.ConfiguracaoLoja;
+import com.salgaderia.app.model.PedidoItem;
+import com.salgaderia.app.model.enums.TipoEntrega;
+import com.salgaderia.app.service.desconto.DescontoCaixaMisteriosa;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.List;
 import com.salgaderia.app.util.ConnectionFactory;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -24,6 +30,17 @@ public final class OperacaoLojaService {
     public void salvarExpediente(LocalTime abertura, LocalTime fechamento, boolean automatico) {
         var config = new ConfiguracaoLoja(true, abertura, fechamento, automatico);
         ConnectionFactory.executarEmTransacao(c -> { dao.salvarExpediente(c, config); return null; });
+    }
+    public void definirPedidoMinimo(BigDecimal valor) {
+        var minimo = ConfiguracaoLoja.validarMinimo(valor);
+        ConnectionFactory.executarEmTransacao(c -> { dao.definirPedidoMinimo(c, minimo); return null; });
+    }
+    public static BigDecimal faltaParaEntrega(ConfiguracaoLoja config, TipoEntrega modalidade, List<PedidoItem> itens) {
+        if (modalidade != TipoEntrega.ENTREGA) return BigDecimal.ZERO;
+        // As caixas têm preço fixo, independente do valor de catálogo dos componentes sorteados.
+        BigDecimal subtotal = PersonalizacaoService.subtotal(itens).subtract(DescontoCaixaMisteriosa.calcularCaixas(itens))
+                .setScale(2, RoundingMode.HALF_UP);
+        return config.pedidoMinimoEntrega().subtract(subtotal).max(BigDecimal.ZERO);
     }
     public void definirAberturaManual(boolean aberta) {
         ConnectionFactory.executarEmTransacao(c -> { dao.definirAberturaManual(c, aberta); return null; });
@@ -52,7 +69,9 @@ public final class OperacaoLojaService {
                     + " às " + config.fechamento().format(HORA) + ").");
         }
     }
-    public void validarPedido(Connection c, LocalDateTime agendado) throws SQLException {
-        validarPedido(dao.buscar(c, true), agendado);
+    public ConfiguracaoLoja validarPedido(Connection c, LocalDateTime agendado) throws SQLException {
+        var config = dao.buscar(c, true);
+        validarPedido(config, agendado);
+        return config;
     }
 }
