@@ -20,7 +20,7 @@ Mantenha as responsabilidades desta camada separadas das demais e consulte os ar
 | [RoletaUi.java](RoletaUi.java) | Anima o prêmio transacional em seis fatias regulares ou VIP, com giro extra quando disponível. |
 | [Senhas.java](Senhas.java) | Geração e verificação de hashes de senha. |
 | [TelaAutenticada.java](TelaAutenticada.java) | Contrato para telas com usuário autenticado. |
-| [WhatsAppUi.java](WhatsAppUi.java) | Feedback visual e alternativa para links WhatsApp. |
+| [WhatsAppUi.java](WhatsAppUi.java) | Mostra na JavaFX a alternativa quando o WhatsApp não abre. |
 
 ## Árvore estrutural comentada
 
@@ -38,7 +38,7 @@ src/main/java/com/salgaderia/app/util/  # Concentra conexão, navegação, auten
 ├── RoletaUi.java  # Anima o prêmio transacional em seis fatias regulares ou VIP, com giro extra quando disponível.
 ├── Senhas.java  # Geração e verificação de hashes de senha.
 ├── TelaAutenticada.java  # Contrato para telas com usuário autenticado.
-└── WhatsAppUi.java  # Feedback visual e alternativa para links WhatsApp.
+└── WhatsAppUi.java  # Mostra na JavaFX a alternativa quando o WhatsApp não abre.
 ```
 
 [🏠 Voltar ao README principal](../../../../../../../README.md)

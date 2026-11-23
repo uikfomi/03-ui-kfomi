@@ -174,7 +174,7 @@ src/main/  # Contém o código executável e os recursos necessários à aplica�
 │   │   │   │   │   ├── ProdutoEstoqueService.java  # Define operações do catálogo, bloqueio de venda e movimentações do estoque físico.
 │   │   │   │   │   ├── README.md  # Guia de navegação e explicações desta pasta.
 │   │   │   │   │   ├── RelatorioFinanceiroService.java  # Contrato de cálculos de balanço, gráficos e exportação CSV.
-│   │   │   │   │   └── WhatsAppLinkService.java  # Gera e abre links do WhatsApp com o acompanhamento, status e nome do entregador.
+│   │   │   │   │   └── WhatsAppLinkService.java  # Gera links do WhatsApp e os abre e copia em segundo plano.
 │   │   │   │   ├── util/  # Conexão, autenticação auxiliar e navegação.
 │   │   │   │   │   ├── .gitkeep  # Marcador que mantém a pasta no controle de versão; não contém dados de aplicação.
 │   │   │   │   │   ├── ConnectionFactory.java  # Pool HikariCP e transações JDBC.
@@ -186,7 +186,7 @@ src/main/  # Contém o código executável e os recursos necessários à aplica�
 │   │   │   │   │   ├── RoletaUi.java  # Anima o prêmio transacional em seis fatias regulares ou VIP, com giro extra quando disponível.
 │   │   │   │   │   ├── Senhas.java  # Geração e verificação de hashes de senha.
 │   │   │   │   │   ├── TelaAutenticada.java  # Contrato para telas com usuário autenticado.
-│   │   │   │   │   └── WhatsAppUi.java  # Feedback visual e alternativa para links WhatsApp.
+│   │   │   │   │   └── WhatsAppUi.java  # Mostra na JavaFX a alternativa quando o WhatsApp não abre.
 │   │   │   │   ├── Main.java  # Inicialização da aplicação JavaFX.
 │   │   │   │   └── README.md  # Guia de navegação e explicações desta pasta.
 │   │   │   └── README.md  # Guia de navegação e explicações desta pasta.

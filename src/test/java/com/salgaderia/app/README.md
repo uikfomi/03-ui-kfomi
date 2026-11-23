@@ -55,7 +55,7 @@ src/test/java/com/salgaderia/app/  # Reúne testes automatizados dos componentes
 │   ├── RelatorioCsvTest.java  # Verifica o balanço exportado em CSV.
 │   ├── VendaTeste.java  # Fornece cadastro isolado, relógio fixo e configuração de loja para testes de venda.
 │   ├── VitrineV150IntegracaoTest.java  # Valida persistência de exclusões e rechecagem de custos, preços e combos antes da venda.
-│   └── WhatsAppLinkServiceTest.java  # Testa links, mensagens e configuração WhatsApp.
+│   └── WhatsAppLinkServiceTest.java  # Testa links, mensagens, configuração e abertura assíncrona do WhatsApp.
 └── README.md  # Guia de navegação e explicações desta pasta.
 ```
 

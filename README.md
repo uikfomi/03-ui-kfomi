@@ -1,6 +1,6 @@
 # Ui K'Fomi — Salgaderia Pro
 
-![Versão](https://img.shields.io/badge/vers%C3%A3o-v1.6.3-8b4513)
+![Versão](https://img.shields.io/badge/vers%C3%A3o-v1.6.4-8b4513)
 ![Java](https://img.shields.io/badge/Java-17%2B-orange)
 ![JavaFX](https://img.shields.io/badge/JavaFX-21-blue)
 ![MySQL](https://img.shields.io/badge/MySQL-8-4479A1)
@@ -38,7 +38,7 @@ Sistema desktop para uma salgaderia, com login único, vitrine de pedidos, agend
 - **Gamificação:** selos persistentes, roleta animada com giro extra e modo VIP, prêmios de uso único e aviso de expiração.
 - **PIX:** cobrança Mercado Pago e confirmação automática para pedidos da vitrine; QR local e confirmação manual no PDV, nas comandas e nas mensalidades.
 - **Estados vazios:** as telas não exibem cadastros fictícios; mostras de ausência de dados são distintas de falhas de conexão.
-- **WhatsApp:** após finalizar e no histórico, o cliente pode abrir uma conversa com a loja pelo botão de acompanhamento. Na agenda e na fila, o administrador pode abrir uma conversa com o contato; ao mudar o status, a opção de notificação vem marcada. O WhatsApp abre com mensagem preenchida: o envio continua dependendo de confirmação no aplicativo.
+- **WhatsApp:** após finalizar e no histórico, o cliente pode abrir uma conversa com a loja pelo botão de acompanhamento. Na agenda e na fila, o administrador pode abrir uma conversa com o contato; ao mudar o status, a opção de notificação vem marcada. A abertura é assíncrona para não bloquear a interface. No Ubuntu/Linux, o aplicativo tenta `xdg-open` antes da API Desktop. O link com a mensagem preenchida é copiado automaticamente para a área de transferência, quando disponível. Se o navegador não abrir, a interface informa a cópia ou oferece o link para cópia manual. O envio continua dependendo de confirmação no WhatsApp.
 - **Acompanhamento:** a lista “Meus Pedidos” e o indicador administrativo de pedidos pendentes consultam o banco a cada cinco segundos enquanto as respectivas telas estão abertas. Os alertas recentes são locais à sessão administrativa.
 - **Balanço CSV:** o painel financeiro permite exportar o período exibido, em UTF-8 com BOM e separador `;`, incluindo faturamento bruto, descontos, custos, perdas e lucro.
 
@@ -479,7 +479,7 @@ Os comentários descrevem a responsabilidade de cada item.
 │   │   │   │   │   │   │   ├── ProdutoEstoqueService.java  # Define operações do catálogo, bloqueio de venda e movimentações do estoque físico.
 │   │   │   │   │   │   │   ├── README.md  # Guia de navegação e explicações desta pasta.
 │   │   │   │   │   │   │   ├── RelatorioFinanceiroService.java  # Contrato de cálculos de balanço, gráficos e exportação CSV.
-│   │   │   │   │   │   │   └── WhatsAppLinkService.java  # Gera e abre links do WhatsApp com o acompanhamento, status e nome do entregador.
+│   │   │   │   │   │   │   └── WhatsAppLinkService.java  # Gera links do WhatsApp e os abre e copia em segundo plano.
 │   │   │   │   │   │   ├── util/  # Conexão, autenticação auxiliar e navegação.
 │   │   │   │   │   │   │   ├── .gitkeep  # Marcador que mantém a pasta no controle de versão; não contém dados de aplicação.
 │   │   │   │   │   │   │   ├── ConnectionFactory.java  # Pool HikariCP e transações JDBC.
@@ -491,7 +491,7 @@ Os comentários descrevem a responsabilidade de cada item.
 │   │   │   │   │   │   │   ├── RoletaUi.java  # Anima o prêmio transacional em seis fatias regulares ou VIP, com giro extra quando disponível.
 │   │   │   │   │   │   │   ├── Senhas.java  # Geração e verificação de hashes de senha.
 │   │   │   │   │   │   │   ├── TelaAutenticada.java  # Contrato para telas com usuário autenticado.
-│   │   │   │   │   │   │   └── WhatsAppUi.java  # Feedback visual e alternativa para links WhatsApp.
+│   │   │   │   │   │   │   └── WhatsAppUi.java  # Mostra na JavaFX a alternativa quando o WhatsApp não abre.
 │   │   │   │   │   │   ├── Main.java  # Inicialização da aplicação JavaFX.
 │   │   │   │   │   │   └── README.md  # Guia de navegação e explicações desta pasta.
 │   │   │   │   │   └── README.md  # Guia de navegação e explicações desta pasta.
@@ -558,7 +558,7 @@ Os comentários descrevem a responsabilidade de cada item.
 │   │   │   │   │   │   │   ├── RelatorioCsvTest.java  # Verifica o balanço exportado em CSV.
 │   │   │   │   │   │   │   ├── VendaTeste.java  # Fornece cadastro isolado, relógio fixo e configuração de loja para testes de venda.
 │   │   │   │   │   │   │   ├── VitrineV150IntegracaoTest.java  # Valida persistência de exclusões e rechecagem de custos, preços e combos antes da venda.
-│   │   │   │   │   │   │   └── WhatsAppLinkServiceTest.java  # Testa links, mensagens e configuração WhatsApp.
+│   │   │   │   │   │   │   └── WhatsAppLinkServiceTest.java  # Testa links, mensagens, configuração e abertura assíncrona do WhatsApp.
 │   │   │   │   │   │   └── README.md  # Guia de navegação e explicações desta pasta.
 │   │   │   │   │   └── README.md  # Guia de navegação e explicações desta pasta.
 │   │   │   │   └── README.md  # Guia de navegação e explicações desta pasta.
@@ -605,8 +605,8 @@ mvn clean test-compile
 `test-compile` compila os testes, mas **não os executa**. Testes opcionais exigem recursos locais:
 
 ```bash
-# MySQL local configurado e migrado; cria e limpa registros temporários
-SALGADERIA_TESTE_MYSQL=true mvn -Dtest=Etapa4IntegracaoTest,DescontoIntegracaoTest,ComandaIntegracaoTest,AgendaJDBCTest,VitrineV150IntegracaoTest,ClubeGamificacaoIntegracaoTest test
+# Testes padrão e integração com MySQL local, sem exigir sessão gráfica
+SALGADERIA_TESTE_MYSQL=true mvn clean test
 
 # Servidor gráfico disponível
 SALGADERIA_TESTE_JAVAFX=true mvn -Dtest=TelasJavaFXTest,AgendaJavaFXTest,VitrineJavaFXTest,AdminDashboardJavaFXTest test
@@ -615,7 +615,7 @@ SALGADERIA_TESTE_JAVAFX=true mvn -Dtest=TelasJavaFXTest,AgendaJavaFXTest,Vitrine
 SALGADERIA_TESTE_MYSQL=true SALGADERIA_TESTE_JAVAFX=true mvn clean test
 ```
 
-Os testes MySQL alteram temporariamente o banco configurado. Use um banco de desenvolvimento/teste, nunca dados de produção.
+Os testes MySQL se conectam diretamente ao `salgaderia_db` de desenvolvimento em `localhost:3306` com a configuração local do projeto, sem iniciar um servidor temporário. Deixe o banco migrado e em execução; os testes criam e limpam registros temporários. Nunca use dados de produção.
 O teste do adapter usa um servidor HTTP em loopback. A suíte não acessa o Mercado Pago nem cria cobranças reais, mesmo que exista token local.
 
 ## Licença

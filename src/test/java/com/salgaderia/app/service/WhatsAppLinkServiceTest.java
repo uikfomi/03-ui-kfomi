@@ -3,16 +3,66 @@ package com.salgaderia.app.service;
 import com.salgaderia.app.model.*;
 import com.salgaderia.app.model.enums.*;
 import java.math.BigDecimal;
+import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class WhatsAppLinkServiceTest {
     @org.junit.jupiter.api.io.TempDir java.nio.file.Path diretorio;
+
+    @Test void aberturaNaoBloqueiaChamadorECopiaLinkMesmoQuandoNavegadorAbre() throws Exception {
+        URI link = new WhatsAppLinkService.Builder("5585989095223").linha("Olá & bom dia!").construir();
+        Thread chamador = Thread.currentThread();
+        CountDownLatch iniciou = new CountDownLatch(1);
+        CountDownLatch liberar = new CountDownLatch(1);
+        AtomicReference<String> copiado = new AtomicReference<>();
+        var resultado = WhatsAppLinkService.abrir(link, uri -> {
+            assertNotSame(chamador, Thread.currentThread());
+            assertEquals(link, uri);
+            iniciou.countDown();
+            try {
+                assertTrue(liberar.await(5, TimeUnit.SECONDS));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                fail(e);
+            }
+        }, copiado::set);
+        try {
+            assertTrue(iniciou.await(5, TimeUnit.SECONDS));
+            assertFalse(resultado.isDone());
+            assertEquals(link.toASCIIString(), copiado.get());
+        } finally {
+            liberar.countDown();
+        }
+        assertEquals(WhatsAppLinkService.ResultadoAbertura.ABERTO, resultado.get(5, TimeUnit.SECONDS));
+    }
+
+    @Test void informaCopiaOuAlternativaManualQuandoNavegadorFalha() throws Exception {
+        URI link = URI.create("https://wa.me/5585989095223");
+        java.util.function.Consumer<URI> indisponivel = uri -> { throw new UnsupportedOperationException(); };
+        java.util.function.Consumer<String> clipboardIndisponivel = texto -> { throw new IllegalStateException(); };
+        assertEquals(WhatsAppLinkService.ResultadoAbertura.COPIADO,
+                WhatsAppLinkService.abrir(link, indisponivel, texto -> {}).get(5, TimeUnit.SECONDS));
+        assertEquals(WhatsAppLinkService.ResultadoAbertura.INDISPONIVEL,
+                WhatsAppLinkService.abrir(link, indisponivel, clipboardIndisponivel).get(5, TimeUnit.SECONDS));
+        assertEquals(WhatsAppLinkService.ResultadoAbertura.ABERTO,
+                WhatsAppLinkService.abrir(link, uri -> {}, clipboardIndisponivel).get(5, TimeUnit.SECONDS));
+    }
+
+    @Test void rejeitaUrisQueNaoApontamParaUmaPaginaWeb() {
+        var servico = new WhatsAppLinkService();
+        assertThrows(IllegalArgumentException.class, () -> servico.abrir(URI.create("file:///etc/passwd")));
+        assertThrows(IllegalArgumentException.class, () -> servico.abrir(URI.create("https:sem-host")));
+    }
+
     @Test void configuracaoLocalSobrescrevePadrao() throws Exception {
         try(var loader=new java.net.URLClassLoader(new java.net.URL[]{diretorio.toUri().toURL()},null)) {
             assertEquals("5585989095223",WhatsAppLinkService.carregarTelefoneLoja(loader));

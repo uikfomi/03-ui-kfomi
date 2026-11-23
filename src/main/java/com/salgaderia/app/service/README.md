@@ -34,7 +34,7 @@ Mantenha as responsabilidades desta camada separadas das demais e consulte os ar
 | [ProdutoEstoqueService.java](ProdutoEstoqueService.java) | Define operações do catálogo, bloqueio de venda e movimentações do estoque físico. |
 | [README.md](README.md) | Guia de navegação e explicações desta pasta. |
 | [RelatorioFinanceiroService.java](RelatorioFinanceiroService.java) | Contrato de cálculos de balanço, gráficos e exportação CSV. |
-| [WhatsAppLinkService.java](WhatsAppLinkService.java) | Gera e abre links do WhatsApp com o acompanhamento, status e nome do entregador. |
+| [WhatsAppLinkService.java](WhatsAppLinkService.java) | Gera links do WhatsApp e os abre e copia em segundo plano. |
 
 ## Árvore estrutural comentada
 
@@ -98,7 +98,7 @@ src/main/java/com/salgaderia/app/service/  # Define contratos e serviços de apl
 ├── ProdutoEstoqueService.java  # Define operações do catálogo, bloqueio de venda e movimentações do estoque físico.
 ├── README.md  # Guia de navegação e explicações desta pasta.
 ├── RelatorioFinanceiroService.java  # Contrato de cálculos de balanço, gráficos e exportação CSV.
-└── WhatsAppLinkService.java  # Gera e abre links do WhatsApp com o acompanhamento, status e nome do entregador.
+└── WhatsAppLinkService.java  # Gera links do WhatsApp e os abre e copia em segundo plano.
 ```
 
 [🏠 Voltar ao README principal](../../../../../../../README.md)

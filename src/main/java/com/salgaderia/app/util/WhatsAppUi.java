@@ -2,6 +2,7 @@ package com.salgaderia.app.util;
 
 import com.salgaderia.app.service.WhatsAppLinkService;
 import java.net.URI;
+import javafx.application.Platform;
 import javafx.scene.control.Alert;
 import javafx.scene.control.TextArea;
 import javafx.stage.Window;
@@ -10,8 +11,15 @@ import javafx.stage.Window;
 public final class WhatsAppUi {
     private WhatsAppUi() { }
     public static void abrir(Window owner, WhatsAppLinkService service, URI uri) {
-        var resultado = service.abrir(uri);
-        if (resultado == WhatsAppLinkService.ResultadoAbertura.ABERTO) return;
+        service.abrir(uri).thenAccept(resultado -> {
+            if (resultado != WhatsAppLinkService.ResultadoAbertura.ABERTO) {
+                Platform.runLater(() -> mostrarAlternativa(owner, uri, resultado));
+            }
+        });
+    }
+
+    private static void mostrarAlternativa(Window owner, URI uri, WhatsAppLinkService.ResultadoAbertura resultado) {
+        if (owner != null && !owner.isShowing()) return;
         Alert alerta = new Alert(Alert.AlertType.INFORMATION);
         if (owner != null) alerta.initOwner(owner);
         alerta.setTitle("WhatsApp"); alerta.setHeaderText(null);
@@ -21,6 +29,6 @@ public final class WhatsAppUi {
             TextArea texto = new TextArea(uri.toASCIIString()); texto.setEditable(false); texto.setWrapText(true);
             alerta.getDialogPane().setExpandableContent(texto); alerta.getDialogPane().setExpanded(true);
         }
-        alerta.showAndWait();
+        alerta.show();
     }
 }

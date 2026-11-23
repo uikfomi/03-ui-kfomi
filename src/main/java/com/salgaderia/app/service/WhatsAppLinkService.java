@@ -3,11 +3,13 @@ package com.salgaderia.app.service;
 import com.salgaderia.app.model.Pedido;
 import com.salgaderia.app.model.PedidoItem;
 import com.salgaderia.app.model.enums.StatusPedido;
+import java.awt.AWTError;
 import java.awt.Desktop;
 import java.awt.GraphicsEnvironment;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -17,6 +19,9 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 /** Cria links wa.me; abrir o link não envia mensagens automaticamente. */
 public final class WhatsAppLinkService {
@@ -97,19 +102,52 @@ public final class WhatsAppLinkService {
     public URI contato(String telefone, String nome) {
         return new Builder(telefone).linha("Olá, " + nome + "! Aqui é da Ui K'fomi.").construir();
     }
-    public ResultadoAbertura abrir(URI uri) {
+    public CompletableFuture<ResultadoAbertura> abrir(URI uri) {
+        return abrir(uri, WhatsAppLinkService::abrirNoNavegador, link ->
+                Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(link), null));
+    }
+
+    static CompletableFuture<ResultadoAbertura> abrir(URI uri, Consumer<URI> navegador, Consumer<String> clipboard) {
         Objects.requireNonNull(uri);
+        if (uri.getHost() == null || !("https".equalsIgnoreCase(uri.getScheme()) || "http".equalsIgnoreCase(uri.getScheme()))) {
+            throw new IllegalArgumentException("Informe um link HTTP ou HTTPS válido");
+        }
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                clipboard.accept(uri.toASCIIString());
+                return true;
+            } catch (RuntimeException | AWTError e) {
+                return false;
+            }
+        }).thenCompose(copiado -> CompletableFuture.runAsync(() -> navegador.accept(uri))
+                .handle((ignorado, erro) -> erro == null ? ResultadoAbertura.ABERTO
+                        : copiado ? ResultadoAbertura.COPIADO : ResultadoAbertura.INDISPONIVEL));
+    }
+
+    private static void abrirNoNavegador(URI uri) {
+        if (System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("linux")) {
+            try {
+                Process processo = new ProcessBuilder("xdg-open", uri.toASCIIString())
+                        .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                        .redirectError(ProcessBuilder.Redirect.DISCARD)
+                        .start();
+                // Um navegador iniciado por xdg-open pode manter o processo ativo.
+                if (!processo.waitFor(2, TimeUnit.SECONDS) || processo.exitValue() == 0) return;
+            } catch (IOException | SecurityException ignored) {
+                // Tenta a API Desktop se o lançador não estiver disponível.
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Abertura do navegador interrompida", e);
+            }
+        }
         try {
             if (!GraphicsEnvironment.isHeadless() && Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
                 Desktop.getDesktop().browse(uri);
-                return ResultadoAbertura.ABERTO;
+                return;
             }
-        } catch (IOException | UnsupportedOperationException | SecurityException ignored) { }
-        try {
-            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(uri.toASCIIString()), null);
-            return ResultadoAbertura.COPIADO;
-        } catch (RuntimeException ignored) {
-            return ResultadoAbertura.INDISPONIVEL;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
+        throw new UnsupportedOperationException("Navegador indisponível");
     }
 }
