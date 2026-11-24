@@ -1,6 +1,6 @@
 # Ui K'Fomi — Salgaderia Pro
 
-![Versão](https://img.shields.io/badge/vers%C3%A3o-v1.7.0-8b4513)
+![Versão](https://img.shields.io/badge/vers%C3%A3o-v1.8.0-8b4513)
 ![Java](https://img.shields.io/badge/Java-17%2B-orange)
 ![JavaFX](https://img.shields.io/badge/JavaFX-21-blue)
 ![MySQL](https://img.shields.io/badge/MySQL-8-4479A1)
@@ -14,6 +14,7 @@ Sistema desktop para uma salgaderia, com login único, vitrine de pedidos, agend
 
 - [Funcionalidades](#funcionalidades)
 - [Operação da loja](#operação-da-loja)
+- [Logística de entrega](#logística-de-entrega)
 - [Categorias, opcionais e cancelamento](#categorias-opcionais-e-cancelamento)
 - [Combos, caixas e fotos](#combos-caixas-e-fotos)
 - [Clube VIP, conquistas e roleta](#clube-vip-conquistas-e-roleta)
@@ -61,7 +62,14 @@ Sistema desktop para uma salgaderia, com login único, vitrine de pedidos, agend
 - Em **Status da Loja**, o Admin pode editar abertura e fechamento (padrão `08:00–23:00`), ativar/desativar o horário automático e usar **Fechar Loja Agora / Abrir Loja Agora**. Com o automático ativo, a chave manual aberta permite pedidos imediatos somente dentro do expediente. Para abrir fora do horário, desative o automático. A abertura é inclusiva, o fechamento é exclusivo; `18:00–01:00` atravessa a meia-noite.
 - O selo da vitrine consulta o estado a cada cinco segundos. Quando fechada, a loja aceita na vitrine somente encomendas futuras dentro do expediente configurado, mesmo em pausa manual ou com o automático desligado. O serviço revalida a regra no banco ao finalizar; a pausa não desativa o PDV interno.
 - Em **Produtos e estoque**, selecione um produto e use **Bloquear / Liberar Venda**. Estoque zero não esgota o cardápio: produtos liberados são feitos sob demanda. Uma mudança é revalidada antes de finalizar, inclusive para itens que já estejam no carrinho. Para a foto, prefira **Selecionar imagem do computador**.
-- Na **Fila de pedidos**, **Despachar entrega** solicita o nome do entregador. A lista **Meus Pedidos** passa a mostrar o banner de entrega em rota. Se a notificação em WhatsApp estiver ativada e houver telefone, o sistema abre uma mensagem preenchida com o nome do entregador; o operador confirma o envio no WhatsApp.
+
+### Logística de entrega
+
+- Em **Bairros & Taxas de Entrega**, cadastre, edite ou desative bairros. A migração traz quatro referências iniciais: **Centro** (R$ 3,00 / 25 min), **Outrabanda** (R$ 5,00 / 35 min), **Parque Iracema** (R$ 6,00 / 40 min) e **Urucará** (R$ 7,00 / 45 min). Revise a cobertura antes de abrir a vitrine.
+- No checkout, **Entrega** exige endereço cadastrado e bairro ativo. **Outro bairro / Fora da área** bloqueia a entrega e orienta a retirar no local. O **Modo Chuva / Horário de Pico**, em **Status da Loja**, soma por padrão R$ 2,00 e 15 min às entregas novas. Frete grátis VIP ou da Roleta, quando aplicado, cobre também o acréscimo. Taxa e prazo são revalidados ao confirmar, e mudanças exigem nova conferência.
+- Cadastre parceiros em **Entregadores Parceiros**. Na fila, **Despachar entrega** aceita apenas parceiros ativos, grava o vínculo e guarda o nome informado no momento do despacho. **Meus Pedidos** exibe o parceiro em rota. Se a notificação estiver ativada e o cliente tiver telefone, o aplicativo abre a mensagem de WhatsApp preenchida; o operador confirma o envio.
+- O **Resumo de Repasses por Entregador**, no **Financeiro**, conta entregas concluídas com parceiro no período do relatório (pela data de criação do pedido) e soma as taxas cobradas. Entregas de frete grátis contam com taxa zero; pedidos cancelados, PIX de demonstração e entregas históricas sem vínculo não entram. O resumo não registra pagamentos de repasse.
+- A **Fila de pedidos** destaca em vermelho **⚠️ ATRASADO** quando um pedido ativo ultrapassa o prazo registrado, contado desde a criação. Para pedidos novos de retirada ou consumo local, o prazo é de 30 min; pedidos históricos sem prazo não recebem esse alerta.
 
 ### Categorias, opcionais e cancelamento
 
@@ -87,7 +95,7 @@ Sistema desktop para uma salgaderia, com login único, vitrine de pedidos, agend
 - **Selos:** **Primeiro Pedido** é concedido na finalização, **Rei do Cento** após receber um pedido com 100 salgados elegíveis e **Cliente Fiel** após a terceira entrega. O barramento Observer grava as conquistas na mesma transação do pedido, sem duplicar selos.
 - **Roleta:** pagamentos PIX confirmados liberam a roleta; pedidos com pagamento na entrega liberam ao marcar `ENTREGUE`. O limite é **um pedido por conta a cada 24 horas**, inclusive se cair “Não foi dessa vez”. Um giro extra fica no mesmo pedido e não pode gerar outro giro extra. A roleta regular oferece mini porção surpresa, frete grátis, pontos em dobro, 10% OFF, giro extra e uma fatia sem prêmio. Acima de **R$ 60,00 no total final**, a roleta VIP oferece também combo brinde e 15% OFF, no lugar da fatia sem prêmio e do cupom de 10%.
 - **Resgate:** cada cupom é exclusivo da conta, exige **R$ 25,00 em itens elegíveis antes do desconto** e vence **cinco dias corridos** após o primeiro giro. A vitrine mostra a contagem regressiva quando faltam menos de 24 horas. O cupom é reservado somente quando seu benefício é escolhido. Cancelar o pedido de resgate devolve o cupom ainda válido; cancelar o pedido premiado revoga o prêmio não utilizado.
-- **Benefícios:** frete grátis abate apenas a taxa de entrega. A taxa padrão é **R$ 5,00** para novos pedidos com entrega e pode ser alterada com `entrega.taxa` (`0.00` desativa a tarifa). A cozinha vê o brinde como observação para separar a cortesia. Para escolher a maior vantagem, o sistema compara a mini porção e o combo com valores indicativos de R$ 4 e R$ 8; eles não reduzem o total a pagar. Pontos em dobro não vencem um desconto em dinheiro: o pedido elegível acumula 10 pontos, ou 20 se o prêmio for selecionado. Os pontos não são dinheiro.
+- **Benefícios:** frete grátis abate apenas a taxa de entrega. O valor vem do bairro e inclui o acréscimo de Chuva/Pico quando ativo. A cozinha vê o brinde como observação para separar a cortesia. Para escolher a maior vantagem, o sistema compara a mini porção e o combo com valores indicativos de R$ 4 e R$ 8; eles não reduzem o total a pagar. Pontos em dobro não vencem um desconto em dinheiro: o pedido elegível acumula 10 pontos, ou 20 se o prêmio for selecionado. Os pontos não são dinheiro.
 
 ### Pagamento PIX
 
@@ -134,6 +142,7 @@ mysql -u root -p < database/scripts/etapa14_pix_roleta_vip.sql
 mysql -u root -p < database/scripts/etapa15_operacao_loja.sql
 mysql -u root -p < database/scripts/etapa16_cadastro_caixa_clube_vip.sql
 mysql -u root -p < database/scripts/etapa17_personalizacao_entrega.sql
+mysql -u root -p < database/scripts/etapa18_logistica_entregadores_chuva.sql
 ```
 
 **Execute as migrações na ordem e somente uma vez.** Embora o schema inicial use `IF NOT EXISTS`, os scripts de migração usam `ALTER TABLE` não idempotente. Antes de atualizar um banco existente, faça backup, confira quais migrações já foram aplicadas e revise dados legados; DDL no MySQL pode causar commit implícito. Usuários clientes antigos sem contato vinculado e fornecedores sem os campos adicionais precisam de saneamento manual. Consulte [as notas de persistência](docs/etapa4-persistencia.md).
@@ -168,7 +177,6 @@ whatsapp.loja=5585989095223
 # pix.chave=
 pix.beneficiario=UI KFOMI SALGADERIA
 pix.cidade=MARANGUAPE
-entrega.taxa=5.00
 # Ativa PIX real via Mercado Pago na vitrine; mantenha a credencial fora do Git
 # mercadopago.access.token=
 ```
@@ -307,6 +315,7 @@ Os comentários descrevem a responsabilidade de cada item.
 │   │   ├── etapa15_operacao_loja.sql  # Adiciona expediente da loja, bloqueio de venda, baixa física e saída para entrega.
 │   │   ├── etapa16_cadastro_caixa_clube_vip.sql  # Migra o cadastro por e-mail, os filtros da caixa e o plano VIP único.
 │   │   ├── etapa17_personalizacao_entrega.sql  # Cria opcionais e registra categorias ativas, instruções do pedido e mínimo de entrega.
+│   │   ├── etapa18_logistica_entregadores_chuva.sql  # Adiciona bairros, entregadores, prazos e configuração de chuva/pico.
 │   │   ├── etapa4_migracao.sql  # Migração de contatos, usuários e custos históricos.
 │   │   ├── etapa8_pdv.sql  # Colunas de origem e pagamento do PDV.
 │   │   ├── etapa9_descontos.sql  # Cupons e registro de descontos por pedido.
@@ -356,6 +365,7 @@ Os comentários descrevem a responsabilidade de cada item.
 │   │   │   │   │   │   │   │   ├── ClubeDAOImpl.java  # Persiste assinaturas VIP, vigências e referências das mensalidades atuais e antigas.
 │   │   │   │   │   │   │   │   ├── ComandaDAOImpl.java  # Implementa operações JDBC de mesas e comandas com bloqueio de linha.
 │   │   │   │   │   │   │   │   ├── ConfiguracaoLojaDAOImpl.java  # Persiste expediente e estado manual separadamente com JDBC.
+│   │   │   │   │   │   │   │   ├── LogisticaDAO.java  # Persiste bairros, entregadores e repasses via JDBC.
 │   │   │   │   │   │   │   │   ├── ContatoDAOImpl.java  # Persiste contatos e atualiza dados do cliente sem sobrescrever os demais campos da agenda.
 │   │   │   │   │   │   │   │   ├── CupomDAOImpl.java  # Consulta elegibilidade, reserva cupons exclusivos e os devolve no cancelamento.
 │   │   │   │   │   │   │   │   ├── GamificacaoDAOImpl.java  # Persiste selos, giros, resgates e trava de 24 horas usando o relógio do banco.
@@ -416,6 +426,8 @@ Os comentários descrevem a responsabilidade de cada item.
 │   │   │   │   │   │   │   ├── Categoria.java  # Categoria de produtos.
 │   │   │   │   │   │   │   ├── Cliente.java  # Contato especializado em cliente.
 │   │   │   │   │   │   │   ├── ConfiguracaoLoja.java  # Representa expediente, modo automático, chave manual e mínimo para entrega.
+│   │   │   │   │   │   │   ├── BairroEntrega.java  # Representa uma região atendida com taxa e prazo.
+│   │   │   │   │   │   │   ├── Entregador.java  # Representa um parceiro disponível ou inativo.
 │   │   │   │   │   │   │   ├── ConquistaCliente.java  # Representa um selo e a data em que foi desbloqueado.
 │   │   │   │   │   │   │   ├── Contato.java  # Abstração comum de contatos.
 │   │   │   │   │   │   │   ├── CupomRoleta.java  # Projeção de código de resgate com benefício, mínimo e data de expiração.
@@ -426,6 +438,7 @@ Os comentários descrevem a responsabilidade de cada item.
 │   │   │   │   │   │   │   ├── Pedido.java  # Mantém itens, total, frete, pagamento, status e liberação da roleta.
 │   │   │   │   │   │   │   ├── PedidoFila.java  # Projeção da fila com modalidade, pagamento e instruções de preparo.
 │   │   │   │   │   │   │   ├── PedidoItem.java  # Registra quantidade, preço histórico, opcionais e observações do item.
+│   │   │   │   │   │   │   ├── RepasseEntregador.java  # Agrupa entregas e taxas cobradas por parceiro.
 │   │   │   │   │   │   │   ├── PersonalizacaoItem.java  # Identifica o grupo, a faixa de orçamento e as exclusões da caixa; preserva os tipos antigos.
 │   │   │   │   │   │   │   ├── PlanoAssinatura.java  # Modela os termos de um plano e define o nome, a mensalidade e o desconto do VIP.
 │   │   │   │   │   │   │   ├── PremioRoleta.java  # Define fatias comuns/VIP e registra resultado, prazo e giro extra.
@@ -469,7 +482,7 @@ Os comentários descrevem a responsabilidade de cada item.
 │   │   │   │   │   │   │   ├── pix/  # Porta, adapters e conciliação da cobrança PIX na vitrine.
 │   │   │   │   │   │   │   │   ├── LocalDemoPixGateway.java  # Gera um BR Code de demonstração sem pagamento ou confirmação externa.
 │   │   │   │   │   │   │   │   ├── MercadoPagoPixGateway.java  # Traduz cobranças para JSON e usa HttpClient para chamar a API Payments com idempotência.
-│   │   │   │   │   │   │   │   ├── PixConfiguracao.java  # Lê o token local do Mercado Pago e a taxa de entrega configurável.
+│   │   │   │   │   │   │   │   ├── PixConfiguracao.java  # Lê o token local do Mercado Pago.
 │   │   │   │   │   │   │   │   ├── PixGatewayService.java  # Porta de criação e consulta das cobranças PIX do checkout.
 │   │   │   │   │   │   │   │   ├── PixPagamentoService.java  # Concilia a resposta do gateway com a cobrança local, sem aprovar valores divergentes.
 │   │   │   │   │   │   │   │   └── README.md  # Guia da integração PIX da vitrine.
@@ -485,6 +498,7 @@ Os comentários descrevem a responsabilidade de cada item.
 │   │   │   │   │   │   │   ├── FotoAvaliacaoStorage.java  # Valida, redimensiona, salva e remove imagens locais de avaliações.
 │   │   │   │   │   │   │   ├── GamificacaoService.java  # Contrato de selos, pontos, cupons, giro regular e giro extra.
 │   │   │   │   │   │   │   ├── OperacaoLojaService.java  # Avalia a abertura e valida agendamentos pelo expediente local, inclusive após a meia-noite.
+│   │   │   │   │   │   │   ├── LogisticaService.java  # Valida cadastros e calcula taxa e prazo por bairro.
 │   │   │   │   │   │   │   ├── PedidoCancelamentoService.java  # Devolve somente o saldo físico baixado e libera o cupom ao cancelar.
 │   │   │   │   │   │   │   ├── PedidoConcluidoObserver.java  # Contrato Observer para finalização, confirmação PIX, entrega e cancelamento.
 │   │   │   │   │   │   │   ├── PedidoVendaService.java  # Contrato para simular descontos, finalizar pedidos e alterar status de vendas.
@@ -532,7 +546,7 @@ Os comentários descrevem a responsabilidade de cada item.
 │   │   │   │   └── .gitkeep  # Marcador que mantém a pasta no controle de versão; não contém dados de aplicação.
 │   │   │   ├── images/  # Espaço reservado para imagens.
 │   │   │   │   └── .gitkeep  # Marcador que mantém a pasta no controle de versão; não contém dados de aplicação.
-│   │   │   ├── database.properties  # Template JDBC e propriedades opcionais de taxa de entrega e pagamentos PIX.
+│   │   │   ├── database.properties  # Template JDBC e propriedades opcionais de pagamento PIX.
 │   │   │   └── README.md  # Guia de navegação e explicações desta pasta.
 │   │   └── README.md  # Guia de navegação e explicações desta pasta.
 │   ├── test/  # Testes automatizados.

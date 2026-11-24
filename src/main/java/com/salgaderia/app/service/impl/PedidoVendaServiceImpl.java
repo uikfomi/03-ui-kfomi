@@ -12,7 +12,7 @@ import com.salgaderia.app.service.PedidoCancelamentoService;
 import com.salgaderia.app.service.PedidoConcluidoObserver.*;
 import com.salgaderia.app.service.OperacaoLojaService;
 import com.salgaderia.app.service.desconto.*;
-import com.salgaderia.app.service.pix.PixConfiguracao;
+import com.salgaderia.app.service.LogisticaService;
 import com.salgaderia.app.service.pix.PixPagamentoService;
 import com.salgaderia.app.util.ConnectionFactory;
 import java.math.BigDecimal;
@@ -34,6 +34,7 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
     private final PixPagamentoDAO pixDados=new PixPagamentoDAOImpl();
     private final PedidoCancelamentoService cancelamento;
     private final OperacaoLojaService operacao;
+    private final LogisticaService logistica = new LogisticaService();
     private record Venda(long id,ResultadoDesconto desconto,StatusPagamento pagamento,boolean demo) { }
     public PedidoVendaServiceImpl(){this(new PedidoDAOImpl(),new ProdutoDAOImpl(),new MovimentacaoEstoqueDAOImpl());}
     public PedidoVendaServiceImpl(PixPagamentoService pix){this(new PedidoDAOImpl(),new ProdutoDAOImpl(),new MovimentacaoEstoqueDAOImpl(),pix);}
@@ -108,7 +109,8 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
                 p.exigirDisponivelParaVenda();
                 atuais.put(id,p);
             }
-            return calcular(c,pedido,codigo,validarItens(c,pedido,atuais,false),false,null);
+            return calcular(c,pedido,codigo,validarItens(c,pedido,atuais,false),false,null,
+                    pedido.getUsuario() instanceof UsuarioCliente && pedido.getTipoEntrega() == TipoEntrega.ENTREGA ? operacao.consultar(c) : null);
         });
     }
     private List<PedidoItem> validarItens(Connection c, Pedido pedido, Map<Long,Produto> atuais, boolean bloquear) throws SQLException {
@@ -135,10 +137,14 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
         PersonalizacaoService.validarComposicao(itens);
         return itens;
     }
-    private ResultadoDesconto calcular(Connection c,Pedido pedido,String codigo,List<PedidoItem> itens,boolean bloqueado,GamificacaoDAO.Conta conta) throws SQLException {
+    private ResultadoDesconto calcular(Connection c,Pedido pedido,String codigo,List<PedidoItem> itens,boolean bloqueado,GamificacaoDAO.Conta conta,ConfiguracaoLoja config) throws SQLException {
         long entregues=pedido.getCliente()==null||pedido.getCliente().getId()==null?0:pedidos.contarEntreguesDoCliente(c,pedido.getCliente().getId());
         Long contaVitrine=pedido.getUsuario() instanceof UsuarioCliente u?u.getId():null;
-        BigDecimal taxa=contaVitrine!=null&&pedido.getTipoEntrega()==TipoEntrega.ENTREGA?PixConfiguracao.taxaEntrega():BigDecimal.ZERO;
+        boolean vitrine = pedido.getUsuario() instanceof UsuarioCliente;
+        var cotacao = vitrine && pedido.getTipoEntrega() == TipoEntrega.ENTREGA
+                ? logistica.cotar(c, pedido.getBairroId(), config, bloqueado) : null;
+        BigDecimal taxa = cotacao == null ? BigDecimal.ZERO : cotacao.taxa();
+        Integer prazo = vitrine ? (cotacao == null ? LogisticaService.PRAZO_BALCAO_MIN : cotacao.minutos()) : null;
         Cupom cupom=null;
         if(codigo!=null&&!codigo.isBlank()){
             String normalizado=codigo.trim().toUpperCase(Locale.ROOT);
@@ -154,7 +160,7 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
                     jogo.contaPorContato(c,pedido.getCliente().getId()).map(GamificacaoDAO.Conta::usuarioId).orElse(null);
         BigDecimal percentual=contaVip==null?BigDecimal.ZERO:clube.assinatura(c,contaVip,bloqueado)
                 .filter(a->a.ativa(LocalDate.now(ClubeServiceImpl.FUSO))&&PlanoAssinatura.NOME_VIP.equals(a.plano())).map(a->PlanoAssinatura.DESCONTO_VIP).orElse(BigDecimal.ZERO);
-        return calculadora.calcular(new ContextoDesconto(itens,entregues,cupom,percentual,taxa));
+        return calculadora.calcular(new ContextoDesconto(itens,entregues,cupom,percentual,taxa)).comPrazo(prazo);
     }
     private long finalizarInterno(Pedido pedido,FormaPagamento forma,BigDecimal recebido,String codigo,ResultadoDesconto esperado){
         Objects.requireNonNull(pedido);if(pedido.getId()!=null||pedido.getStatus()!=StatusPedido.PENDENTE||pedido.getItens().isEmpty())throw new IllegalArgumentException("Pedido deve ser novo, pendente e conter itens");
@@ -204,13 +210,15 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
                 BigDecimal falta = OperacaoLojaService.faltaParaEntrega(config, pedido.getTipoEntrega(), itens);
                 if (falta.signum() > 0) throw new IllegalArgumentException("Adicione mais R$ " + falta.toPlainString().replace('.', ',') + " para atingir o mínimo de entrega (sem frete).");
             }
-            ResultadoDesconto desconto=calcular(c,pedido,codigo,itens,true,conta);
+            ResultadoDesconto desconto=calcular(c,pedido,codigo,itens,true,conta,config);
             if(esperado!=null && (desconto.subtotal().compareTo(esperado.subtotal())!=0 || desconto.desconto().compareTo(esperado.desconto())!=0 ||
                     desconto.taxaEntrega().compareTo(esperado.taxaEntrega())!=0 || !desconto.estrategia().equals(esperado.estrategia()) ||
-                    desconto.freteGratisVip()!=esperado.freteGratisVip()||!Objects.equals(desconto.cupom(),esperado.cupom())||!Objects.equals(desconto.brinde(),esperado.brinde())))
-                throw new IllegalArgumentException("Desconto alterado; recalcule e confirme o pedido");
+                    !Objects.equals(desconto.tempoEstimadoMin(),esperado.tempoEstimadoMin()) || desconto.freteGratisVip()!=esperado.freteGratisVip()||!Objects.equals(desconto.cupom(),esperado.cupom())||!Objects.equals(desconto.brinde(),esperado.brinde())))
+                throw new IllegalArgumentException("Preço, prazo ou desconto mudou. Confira a nova cotação antes de confirmar.");
             if(forma!=null && forma.isPermiteTroco() && (recebido==null || recebido.scale()>2 || recebido.compareTo(desconto.total())<0 || recebido.compareTo(new BigDecimal("99999999.99"))>0))
                 throw new IllegalArgumentException("Valor recebido insuficiente ou inválido");
+            if (!vitrine || pedido.getTipoEntrega() != TipoEntrega.ENTREGA) pedido.setBairroId(null);
+            pedido.setTempoEstimadoMin(desconto.tempoEstimadoMin());
             long pedidoId=pedidos.inserir(c,pedido,custos,baixas);
             pedidos.registrarDesconto(c,pedidoId,desconto);
             boolean pixVitrine=vitrine&&pedido.getFormaPagamento()==FormaPagamento.PIX;
@@ -248,8 +256,14 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
             return null;
         });
     }
-    @Override public void transicionar(long pedidoId,StatusPedido destino,String entregador){
-        ConnectionFactory.executarEmTransacao(c->{
+    @Override public void transicionar(long pedidoId,StatusPedido destino){
+        mudarStatus(pedidoId, destino, null);
+    }
+    @Override public String despachar(long pedidoId, long entregadorId) {
+        return mudarStatus(pedidoId, StatusPedido.SAIU_ENTREGA, entregadorId);
+    }
+    private String mudarStatus(long pedidoId, StatusPedido destino, Long entregadorId) {
+        return ConnectionFactory.executarEmTransacao(c->{
             var conta=bloquearConta(c,jogo.contaDoPedido(c,pedidoId).orElse(null));
             var fluxo=pedidos.bloquearFluxo(c,pedidoId);
             StatusPedido atual=fluxo.status();
@@ -262,8 +276,13 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
                     throw new IllegalStateException("PIX real iniciado: confira e trate a cobrança no Mercado Pago. O aplicativo não emite estornos.");
                 cancelamento.cancelar(c,pedidoId);return null;
             }
-            if(destino==StatusPedido.SAIU_ENTREGA)pedidos.registrarSaidaEntrega(c,pedidoId,Pedido.validarNomeEntregador(entregador));
-            else pedidos.atualizarStatus(c,pedidoId,destino);
+            if(destino==StatusPedido.SAIU_ENTREGA) {
+                if (entregadorId == null) throw new IllegalArgumentException("Selecione um entregador parceiro.");
+                var parceiro = logistica.exigirEntregadorAtivo(c, entregadorId);
+                pedidos.registrarSaidaEntrega(c, pedidoId, parceiro.id(), parceiro.nome());
+                return parceiro.nome();
+            }
+            pedidos.atualizarStatus(c,pedidoId,destino);
             if(destino==StatusPedido.ENTREGUE)eventos.publicar(c,new Evento(pedidoId,conta,Etapa.ENTREGUE,false));
             return null;
         });

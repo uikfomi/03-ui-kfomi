@@ -16,6 +16,7 @@ Mantenha as responsabilidades desta camada separadas das demais e consulte os ar
 | [ClubeDAOImpl.java](ClubeDAOImpl.java) | Persiste assinaturas VIP, vigências e referências das mensalidades atuais e antigas. |
 | [ComandaDAOImpl.java](ComandaDAOImpl.java) | Implementa operações JDBC de mesas e comandas com bloqueio de linha. |
 | [ConfiguracaoLojaDAOImpl.java](ConfiguracaoLojaDAOImpl.java) | Persiste expediente e estado manual separadamente com JDBC. |
+| [LogisticaDAO.java](LogisticaDAO.java) | Persiste bairros, entregadores e repasses via JDBC. |
 | [ContatoDAOImpl.java](ContatoDAOImpl.java) | Persiste contatos e atualiza dados do cliente sem sobrescrever os demais campos da agenda. |
 | [CupomDAOImpl.java](CupomDAOImpl.java) | Consulta elegibilidade, reserva cupons exclusivos e os devolve no cancelamento. |
 | [GamificacaoDAOImpl.java](GamificacaoDAOImpl.java) | Persiste selos, giros, resgates e trava de 24 horas usando o relógio do banco. |
@@ -39,6 +40,7 @@ src/main/java/com/salgaderia/app/dao/impl/  # Reúne implementações dos contra
 ├── ClubeDAOImpl.java  # Persiste assinaturas VIP, vigências e referências das mensalidades atuais e antigas.
 ├── ComandaDAOImpl.java  # Implementa operações JDBC de mesas e comandas com bloqueio de linha.
 ├── ConfiguracaoLojaDAOImpl.java  # Persiste expediente e estado manual separadamente com JDBC.
+├── LogisticaDAO.java  # Persiste bairros, entregadores e repasses via JDBC.
 ├── ContatoDAOImpl.java  # Persiste contatos e atualiza dados do cliente sem sobrescrever os demais campos da agenda.
 ├── CupomDAOImpl.java  # Consulta elegibilidade, reserva cupons exclusivos e os devolve no cancelamento.
 ├── GamificacaoDAOImpl.java  # Persiste selos, giros, resgates e trava de 24 horas usando o relógio do banco.

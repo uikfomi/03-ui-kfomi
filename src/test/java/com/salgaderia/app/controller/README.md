@@ -6,6 +6,8 @@ Reúne testes automatizados dos componentes presentes neste pacote.
 
 Execute os testes compatíveis com o ambiente; os testes de integração podem exigir banco ou display.
 
+Os testes de logística verificam o bloqueio na vitrine para bairro fora da área e o destaque vermelho na fila.
+
 ## Explore as subpastas e arquivos
 
 | Caminho | Conteúdo e responsabilidade |

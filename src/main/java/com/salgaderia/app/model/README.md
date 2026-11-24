@@ -20,6 +20,8 @@ Mantenha as responsabilidades desta camada separadas das demais e consulte os ar
 | [Categoria.java](Categoria.java) | Categoria de produtos. |
 | [Cliente.java](Cliente.java) | Contato especializado em cliente. |
 | [ConfiguracaoLoja.java](ConfiguracaoLoja.java) | Representa expediente, modo automático, chave manual e mínimo para entrega. |
+| [BairroEntrega.java](BairroEntrega.java) | Representa uma região atendida com taxa e prazo. |
+| [Entregador.java](Entregador.java) | Representa um parceiro disponível ou inativo. |
 | [ConquistaCliente.java](ConquistaCliente.java) | Representa um selo e a data em que foi desbloqueado. |
 | [Contato.java](Contato.java) | Abstração comum de contatos. |
 | [CupomRoleta.java](CupomRoleta.java) | Projeção de código de resgate com benefício, mínimo e data de expiração. |
@@ -30,6 +32,7 @@ Mantenha as responsabilidades desta camada separadas das demais e consulte os ar
 | [Pedido.java](Pedido.java) | Mantém itens, total, frete, pagamento, status e liberação da roleta. |
 | [PedidoFila.java](PedidoFila.java) | Projeção da fila com modalidade, pagamento e instruções de preparo. |
 | [PedidoItem.java](PedidoItem.java) | Registra quantidade, preço histórico, opcionais e observações do item. |
+| [RepasseEntregador.java](RepasseEntregador.java) | Agrupa entregas e taxas cobradas por parceiro. |
 | [PersonalizacaoItem.java](PersonalizacaoItem.java) | Identifica o grupo, a faixa de orçamento e as exclusões da caixa; preserva os tipos antigos. |
 | [PlanoAssinatura.java](PlanoAssinatura.java) | Modela os termos de um plano e define o nome, a mensalidade e o desconto do VIP. |
 | [PremioRoleta.java](PremioRoleta.java) | Define fatias comuns/VIP e registra resultado, prazo e giro extra. |
@@ -72,6 +75,8 @@ src/main/java/com/salgaderia/app/model/  # Agrupa entidades, tipos de domínio e
 ├── Categoria.java  # Categoria de produtos.
 ├── Cliente.java  # Contato especializado em cliente.
 ├── ConfiguracaoLoja.java  # Representa expediente, modo automático, chave manual e mínimo para entrega.
+├── BairroEntrega.java  # Representa uma região atendida com taxa e prazo.
+├── Entregador.java  # Representa um parceiro disponível ou inativo.
 ├── ConquistaCliente.java  # Representa um selo e a data em que foi desbloqueado.
 ├── Contato.java  # Abstração comum de contatos.
 ├── CupomRoleta.java  # Projeção de código de resgate com benefício, mínimo e data de expiração.
@@ -82,6 +87,7 @@ src/main/java/com/salgaderia/app/model/  # Agrupa entidades, tipos de domínio e
 ├── Pedido.java  # Mantém itens, total, frete, pagamento, status e liberação da roleta.
 ├── PedidoFila.java  # Projeção da fila com modalidade, pagamento e instruções de preparo.
 ├── PedidoItem.java  # Registra quantidade, preço histórico, opcionais e observações do item.
+├── RepasseEntregador.java  # Agrupa entregas e taxas cobradas por parceiro.
 ├── PersonalizacaoItem.java  # Identifica o grupo, a faixa de orçamento e as exclusões da caixa; preserva os tipos antigos.
 ├── PlanoAssinatura.java  # Modela os termos de um plano e define o nome, a mensalidade e o desconto do VIP.
 ├── PremioRoleta.java  # Define fatias comuns/VIP e registra resultado, prazo e giro extra.

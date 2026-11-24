@@ -49,6 +49,7 @@ public class AdminDashboardController implements TelaAutenticada {
     @FXML private BorderPane raiz;
     @FXML private Label titulo, usuarioNome, badgePendentes, avisoPedido;
     @FXML private VBox conteudo, alertasRecentes;
+    private final LogisticaService logistica = new LogisticaService();
     private final OperacaoLojaService operacaoLoja = new OperacaoLojaService();
     private final ProdutoEstoqueService produtos;
     private final PedidoVendaService pedidos;
@@ -61,7 +62,8 @@ public class AdminDashboardController implements TelaAutenticada {
     private Usuario usuario;
     private long telaAtual;
     private final WhatsAppLinkService whatsapp = new WhatsAppLinkService();
-    private final Timeline notificacoes = new Timeline(new KeyFrame(Duration.seconds(5),e->{atualizarNotificacoes();conciliarPix();}));
+    private final List<Runnable> alertasAtraso = new ArrayList<>();
+    private final Timeline notificacoes = new Timeline(new KeyFrame(Duration.seconds(5),e->{atualizarNotificacoes();conciliarPix();alertasAtraso.forEach(Runnable::run);}));
     private final Set<Long> pedidosConhecidos = new HashSet<>();
     private boolean primeiraConsulta = true, consultaNotificacoes;
     private boolean notificacoesAtivas;
@@ -72,7 +74,7 @@ public class AdminDashboardController implements TelaAutenticada {
     private record ItemVenda(Produto produto,int quantidade) { }
     private record DadosPdv(List<Produto> produtos,List<Contato> contatos) { }
     private record DadosEstoque(List<Produto> produtos,List<Categoria> categorias,List<Contato> fornecedores) { }
-    private record DadosFinanceiros(RelatorioFinanceiroService.Relatorio totais,Map<String,BigDecimal> produtos,Map<String,BigDecimal> categorias) { }
+    private record DadosFinanceiros(RelatorioFinanceiroService.Relatorio totais,Map<String,BigDecimal> produtos,Map<String,BigDecimal> categorias,List<RepasseEntregador> repasses) { }
     private record DadosMesa(Comanda comanda,List<Produto> produtos) { }
 
     public AdminDashboardController(){this(new ProdutoEstoqueServiceImpl(),new PedidoVendaServiceImpl(),new AgendaServiceImpl(new ContatoDAOImpl()),new RelatorioFinanceiroServiceImpl(),new AvaliacaoServiceImpl());}
@@ -133,7 +135,7 @@ public class AdminDashboardController implements TelaAutenticada {
         tarefa.setOnFailed(e->conciliandoPix=false);
         Thread t=new Thread(tarefa,"admin-conciliacao-pix");t.setDaemon(true);t.start();
     }
-    private long iniciarTela(String nome){titulo.setText(nome);conteudo.getChildren().setAll(estado("Carregando..."));return ++telaAtual;}
+    private long iniciarTela(String nome){alertasAtraso.clear();titulo.setText(nome);conteudo.getChildren().setAll(estado("Carregando..."));return ++telaAtual;}
     private <T> void carregar(long versao,Supplier<T> operacao,Consumer<T> sucesso){
         Task<T> tarefa=new Task<>(){@Override protected T call(){return operacao.get();}};
         tarefa.setOnSucceeded(e->{if(versao==telaAtual)sucesso.accept(tarefa.getValue());});
@@ -326,6 +328,7 @@ public class AdminDashboardController implements TelaAutenticada {
             for(PedidoFila p:lista){
                 String pagamento=p.pixDemonstracao()?" · SIMULAÇÃO (nenhum pagamento real)":p.pixReal()?" · PIX confirmado":" · Pagamento na entrega";
                 Label info=new Label("#"+p.id()+"  ·  "+p.cliente()+"  ·  "+p.status()+"  ·  "+p.entrega()+"  ·  "+moeda(p.total())+pagamento+"\n"+p.itens()+(p.enderecoEntrega()==null||p.enderecoEntrega().isBlank()?"":"\nEndereço: "+p.enderecoEntrega())+(p.agendadoPara()==null?"":"\nAgendado: "+p.agendadoPara().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"))));info.setWrapText(true);HBox.setHgrow(info,Priority.ALWAYS);
+                if(p.bairro()!=null)info.setText(info.getText()+"\nBairro: "+p.bairro());
                 if(p.nomeEntregador()!=null)info.setText(info.getText()+"\nEntregador: "+p.nomeEntregador());
                 StatusPedido proximo=p.status().proximo(p.entrega());
                 Button avancar=botao(proximo==StatusPedido.SAIU_ENTREGA?"Despachar entrega":"Avançar para "+proximo,()->mudarStatus(p,proximo),"button-primary");
@@ -335,7 +338,9 @@ public class AdminDashboardController implements TelaAutenticada {
                 if(p.pixReal())cancelar.setTooltip(new Tooltip("Estornos de PIX real devem ser tratados no Mercado Pago."));
                 Button chamar=botao("Chamar no WhatsApp",()->chamarCliente(p,p.status(),p.nomeEntregador()),"button-secondary");
                 chamar.setDisable(p.telefone()==null||p.telefone().isBlank());
-                VBox dados = new VBox(8, info); HBox.setHgrow(dados, Priority.ALWAYS);
+                Label atraso = texto("⚠️ ATRASADO", "pedido-atraso-titulo");
+                atraso.managedProperty().bind(atraso.visibleProperty());
+                VBox dados = new VBox(8, atraso, info); HBox.setHgrow(dados, Priority.ALWAYS);
                 if (!p.detalhesPreparo().isEmpty()) {
                     VBox preparo = new VBox(6, texto("ATENÇÃO AO PREPARO", "preparo-titulo"));
                     preparo.getStyleClass().add("preparo-destaque");
@@ -346,24 +351,41 @@ public class AdminDashboardController implements TelaAutenticada {
                     dados.getChildren().add(preparo);
                 }
                 HBox linha=new HBox(10,dados,avancar,cancelar,chamar);linha.setAlignment(Pos.CENTER_LEFT);linha.getStyleClass().add("admin-card");conteudo.getChildren().add(linha);
+                Runnable atualizarAtraso = () -> {
+                    boolean atrasado = p.atrasadoEm(LocalDateTime.now());
+                    atraso.setVisible(atrasado);
+                    linha.pseudoClassStateChanged(javafx.css.PseudoClass.getPseudoClass("atrasado"), atrasado);
+                };
+                atualizarAtraso.run();alertasAtraso.add(atualizarAtraso);
             }
         });
     }
     private void mudarStatus(PedidoFila pedido,StatusPedido status){
-        String entregador=null;
-        if(status==StatusPedido.SAIU_ENTREGA){
-            TextInputDialog dialog=new TextInputDialog();dialog.initOwner(raiz.getScene().getWindow());
-            dialog.setTitle("Despachar entrega");dialog.setHeaderText("Pedido #"+pedido.id());dialog.setContentText("Nome do entregador:");
-            var nome=dialog.showAndWait();if(nome.isEmpty())return;
-            try{entregador=Pedido.validarNomeEntregador(nome.get());}
-            catch(IllegalArgumentException e){avisar(Alert.AlertType.WARNING,"Entregador obrigatório",e.getMessage());return;}
+        if (status == StatusPedido.SAIU_ENTREGA) {
+            executar(() -> logistica.entregadores(true), ativos -> escolherEntregador(pedido, ativos));
+        } else {
+            executar(() -> { pedidos.transicionar(pedido.id(), status); return pedido.nomeEntregador(); },
+                    nome -> aposStatus(pedido, status, nome));
         }
-        String nomeConfirmado=entregador;
-        boolean notificar=notificarStatus.isSelected();
-        executar(()->{pedidos.transicionar(pedido.id(),status,nomeConfirmado);return null;},x->{
-            if(notificar&&pedido.telefone()!=null&&!pedido.telefone().isBlank())chamarCliente(pedido,status,nomeConfirmado);
-            atualizarNotificacoes();fila();
-        });
+    }
+    private void escolherEntregador(PedidoFila pedido, List<Entregador> ativos) {
+        if (ativos.isEmpty()) {
+            avisar(Alert.AlertType.INFORMATION,"Nenhum entregador ativo","Cadastre ou reative um parceiro antes de despachar.");
+            return;
+        }
+        Dialog<ButtonType> dialog = dialog("Despachar pedido #" + pedido.id());
+        ComboBox<Entregador> parceiros = new ComboBox<>();
+        parceiros.getItems().setAll(ativos);
+        parceiros.setPromptText("Selecione o entregador parceiro");
+        dialog.getDialogPane().setContent(parceiros);
+        dialog.getDialogPane().lookupButton(ButtonType.OK).disableProperty().bind(parceiros.valueProperty().isNull());
+        if (dialog.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
+        long id = parceiros.getValue().id();
+        executar(() -> pedidos.despachar(pedido.id(), id), nome -> aposStatus(pedido, StatusPedido.SAIU_ENTREGA, nome));
+    }
+    private void aposStatus(PedidoFila pedido, StatusPedido status, String nome) {
+        if(notificarStatus.isSelected()&&pedido.telefone()!=null&&!pedido.telefone().isBlank())chamarCliente(pedido,status,nome);
+        atualizarNotificacoes();fila();
     }
     private void chamarCliente(PedidoFila pedido,StatusPedido status,String entregador){
         try{WhatsAppUi.abrir(raiz.getScene().getWindow(),whatsapp,whatsapp.status(pedido.telefone(),pedido.id(),status,entregador));}
@@ -401,7 +423,16 @@ public class AdminDashboardController implements TelaAutenticada {
                 executar(() -> { operacaoLoja.definirPedidoMinimo(valor); return null; }, x -> statusLoja());
             } catch (IllegalArgumentException e) { avisar(Alert.AlertType.WARNING, "Valor inválido", "Informe o mínimo em reais, por exemplo 20,00."); }
         }, "button-secondary");
-        VBox painel=new VBox(10,status,regra,new HBox(12,new VBox(4,new Label("Abertura"),abertura),new VBox(4,new Label("Fechamento"),fechamento)),automatico,new HBox(10,salvar,alternar),
+        CheckBox chuva = new CheckBox("🌧️ Modo Chuva / Horário de Pico");
+        chuva.setId("loja-modo-chuva");
+        chuva.setSelected(config.modoChuvaAtivo());
+        chuva.setOnAction(e -> {
+            boolean ativo = chuva.isSelected();
+            executar(() -> { operacaoLoja.definirModoChuva(ativo); return null; }, x -> statusLoja(),
+                    () -> chuva.setSelected(config.modoChuvaAtivo()));
+        });
+        Label acrescimo = texto("Quando ativo: +" + config.acrescimoTempoChuvaMin() + " min e +" + moeda(config.acrescimoTaxaChuva()) + " no frete.", "subtitle");
+        VBox painel=new VBox(10,status,regra,chuva,acrescimo,new HBox(12,new VBox(4,new Label("Abertura"),abertura),new VBox(4,new Label("Fechamento"),fechamento)),automatico,new HBox(10,salvar,alternar),
                 new Label("Pedido mínimo para entrega (R$, sem frete)"), new HBox(10, minimo, salvarMinimo));
         painel.getStyleClass().add("admin-card");conteudo.getChildren().setAll(painel);
     }
@@ -510,14 +541,84 @@ public class AdminDashboardController implements TelaAutenticada {
         catch(RuntimeException e){avisar(Alert.AlertType.WARNING,"Dados inválidos","Informe quantidade e motivo.");}
     }
 
+    @FXML private void bairrosEntrega() {
+        long versao = iniciarTela("Bairros & Taxas de Entrega");
+        carregar(versao, () -> logistica.bairros(false), bairros -> {
+            TableView<BairroEntrega> tabela = new TableView<>();
+            tabela.setPlaceholder(estado("Nenhum bairro cadastrado."));
+            coluna(tabela, "Bairro", BairroEntrega::nome, 220);
+            coluna(tabela, "Taxa", b -> moeda(b.taxaEntrega()), 100);
+            coluna(tabela, "Prazo", b -> b.tempoEstimadoMin() + " min", 100);
+            coluna(tabela, "Situação", b -> b.ativo() ? "Ativo" : "Inativo", 100);
+            montarCadastro(tabela, bairros, "Novo bairro", this::formularioBairro);
+        });
+    }
+    private void formularioBairro(BairroEntrega atual) {
+        Dialog<ButtonType> d = dialog(atual == null ? "Novo bairro" : "Editar bairro");
+        TextField nome = campo(atual == null ? "" : atual.nome(), "Nome");
+        TextField taxa = campo(atual == null ? "" : atual.taxaEntrega().toPlainString(), "Taxa em reais");
+        TextField prazo = campo(atual == null ? "" : Integer.toString(atual.tempoEstimadoMin()), "Prazo em minutos");
+        CheckBox ativo = new CheckBox("Atende entregas neste bairro"); ativo.setSelected(atual == null || atual.ativo());
+        d.getDialogPane().setContent(new VBox(8, new Label("Bairro"), nome, new Label("Taxa (R$)"), taxa,
+                new Label("Prazo (minutos)"), prazo, ativo));
+        if (d.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
+        try {
+            var b = new BairroEntrega(atual == null ? null : atual.id(), nome.getText(), decimal(taxa.getText()), Integer.parseInt(prazo.getText().strip()), ativo.isSelected());
+            executar(() -> { logistica.salvar(b); return null; }, x -> bairrosEntrega());
+        } catch (NumberFormatException e) {
+            avisar(Alert.AlertType.WARNING, "Dados inválidos", "Informe uma taxa em reais e um prazo inteiro em minutos.");
+        }
+    }
+    @FXML private void entregadoresParceiros() {
+        long versao = iniciarTela("Entregadores Parceiros");
+        carregar(versao, () -> logistica.entregadores(false), parceiros -> {
+            TableView<Entregador> tabela = new TableView<>();
+            tabela.setPlaceholder(estado("Nenhum entregador cadastrado."));
+            coluna(tabela, "Nome", Entregador::nome, 220);
+            coluna(tabela, "Telefone", e -> nulo(e.telefone()), 130);
+            coluna(tabela, "Placa", e -> nulo(e.placaVeiculo()), 90);
+            coluna(tabela, "Situação", e -> e.ativo() ? "Ativo" : "Inativo", 100);
+            montarCadastro(tabela, parceiros, "Novo entregador", this::formularioEntregador);
+        });
+    }
+    private void formularioEntregador(Entregador atual) {
+        Dialog<ButtonType> d = dialog(atual == null ? "Novo entregador" : "Editar entregador");
+        TextField nome = campo(atual == null ? "" : atual.nome(), "Nome");
+        TextField telefone = campo(atual == null ? "" : atual.telefone(), "Telefone opcional");
+        TextField placa = campo(atual == null ? "" : atual.placaVeiculo(), "Placa opcional");
+        CheckBox ativo = new CheckBox("Disponível para novas entregas"); ativo.setSelected(atual == null || atual.ativo());
+        d.getDialogPane().setContent(new VBox(8, new Label("Nome"), nome, new Label("Telefone"), telefone,
+                new Label("Placa do veículo"), placa, ativo));
+        if (d.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
+        var parceiro = new Entregador(atual == null ? null : atual.id(), nome.getText(), telefone.getText(), placa.getText(), ativo.isSelected());
+        executar(() -> { logistica.salvar(parceiro); return null; }, x -> entregadoresParceiros());
+    }
+    private <T> void montarCadastro(TableView<T> tabela, List<T> itens, String rotuloNovo, Consumer<T> editar) {
+        tabela.getItems().setAll(itens);
+        tabela.setPrefHeight(320);
+        Button novo = botao(rotuloNovo, () -> editar.accept(null), "button-primary");
+        Button alterar = botao("Editar selecionado", () -> editar.accept(tabela.getSelectionModel().getSelectedItem()), "button-secondary");
+        alterar.disableProperty().bind(tabela.getSelectionModel().selectedItemProperty().isNull());
+        conteudo.getChildren().setAll(tabela, new HBox(8, novo, alterar));
+    }
+
     @FXML private void financeiro(){
         long versao=iniciarTela("Financeiro e lucro líquido");
         LocalDateTime inicio=LocalDate.now().withDayOfMonth(1).atStartOfDay(),fim=LocalDate.now().plusDays(1).atStartOfDay();
-        carregar(versao,()->new DadosFinanceiros(financeiro.calcular(inicio,fim),financeiro.produtosMaisVendidos(inicio,fim),financeiro.receitaPorCategoria(inicio,fim)),dados->{
+        carregar(versao,()->new DadosFinanceiros(financeiro.calcular(inicio,fim),financeiro.produtosMaisVendidos(inicio,fim),financeiro.receitaPorCategoria(inicio,fim),financeiro.repasses(inicio,fim)),dados->{
             conteudo.getChildren().clear();conteudo.getChildren().add(texto("Mês atual · pedidos entregues pela data de criação; perdas pela data da movimentação.","subtitle"));
             var r=dados.totais();FlowPane indicadores=new FlowPane(10,10,indicador("Faturamento após descontos",r.faturamentoAposDescontos()),indicador("Custos de produção",r.custoTotalProducao()),indicador("Perdas",r.perdas()),indicador("Lucro líquido real",r.lucroLiquidoReal()));
             Button exportar=botao("Exportar Balanço (.CSV)",()->exportarBalanco(r),"button-secondary");exportar.setId("exportar-csv");
-            conteudo.getChildren().addAll(indicadores,exportar);
+            conteudo.getChildren().addAll(indicadores,exportar,texto("Resumo de Repasses por Entregador", "admin-subtitulo"),
+                    texto("Taxas cobradas em entregas concluídas, pela data de criação do pedido; frete grátis não soma taxa.", "subtitle"));
+            TableView<RepasseEntregador> repasses = new TableView<>();
+            repasses.setPrefHeight(180);
+            repasses.setPlaceholder(estado("Nenhuma entrega concluída com parceiro no período."));
+            coluna(repasses, "Entregador", e -> e.nome() + " (#" + e.entregadorId() + ")", 220);
+            coluna(repasses, "Entregas", e -> Long.toString(e.entregas()), 100);
+            coluna(repasses, "Total de taxas", e -> moeda(e.totalTaxas()), 130);
+            repasses.getItems().setAll(dados.repasses());
+            conteudo.getChildren().add(repasses);
             if(dados.produtos().isEmpty())conteudo.getChildren().add(estado("Nenhuma venda entregue no período para o gráfico de produtos."));
             else{CategoryAxis eixoX=new CategoryAxis();NumberAxis eixoY=new NumberAxis();eixoY.setLabel("Quantidade");BarChart<String,Number> grafico=new BarChart<>(eixoX,eixoY);grafico.setTitle("Produtos mais vendidos");grafico.setLegendVisible(false);XYChart.Series<String,Number> serie=new XYChart.Series<>();dados.produtos().forEach((nome,qtd)->serie.getData().add(new XYChart.Data<>(nome,qtd)));grafico.getData().add(serie);conteudo.getChildren().add(grafico);}
             if(dados.categorias().isEmpty())conteudo.getChildren().add(estado("Nenhuma receita por categoria no período."));

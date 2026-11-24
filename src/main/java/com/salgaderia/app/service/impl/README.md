@@ -6,6 +6,8 @@ Reúne implementações dos contratos da camada correspondente; DAOs usam JDBC e
 
 Mantenha as responsabilidades desta camada separadas das demais e consulte os arquivos relacionados antes de alterações.
 
+O checkout revalida tarifa e prazo de entrega na mesma transação da venda. O despacho vincula um parceiro ativo ao pedido.
+
 ## Explore as subpastas e arquivos
 
 | Caminho | Conteúdo e responsabilidade |

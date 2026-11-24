@@ -73,19 +73,24 @@ class VitrineJavaFXTest {
                 ((RadioButton)loader.getNamespace().get("entrega")).fire();assertEquals("Rua das Flores",((Label)loader.getNamespace().get("endereco")).getText());
                 assertTrue(((Button)loader.getNamespace().get("finalizar")).isDisabled());
                 assertTrue(((Label)loader.getNamespace().get("mensagemMinimo")).getText().contains("4,00"));
+                var bairros = (ComboBox<?>) loader.getNamespace().get("bairroEntrega");
+                bairros.getSelectionModel().selectLast();
+                assertTrue(((Label)loader.getNamespace().get("mensagemFrete")).getText().contains("Retire"));
+                assertTrue(((Button)loader.getNamespace().get("finalizar")).isDisabled());
+                bairros.getSelectionModel().selectFirst();
                 ((Button)root.lookup("#adicionar-1")).fire();
                 ((TextField)loader.getNamespace().get("busca")).setText("FRANGO");return null;
             });
             assertEquals(1,fx(()->((FlowPane)loader.getNamespace().get("cards")).getChildren().size()));
             fx(()->{((TextField)loader.getNamespace().get("cupom")).setText("UIKFOMI10");return null;});
-            aguardar(()->fx(()->((Label)loader.getNamespace().get("total")).getText().contains("21,60")));
+            aguardar(()->fx(()->((Label)loader.getNamespace().get("total")).getText().contains("24,60")));
             fx(()->{
                 assertTrue(((Button)loader.getNamespace().get("finalizar")).isDisabled());
                 @SuppressWarnings("unchecked") ComboBox<FormaPagamento> pagamento=(ComboBox<FormaPagamento>)loader.getNamespace().get("formaPagamento");
                 assertEquals(List.of(FormaPagamento.PIX,FormaPagamento.DINHEIRO,FormaPagamento.CARTAO),List.copyOf(pagamento.getItems()));
                 pagamento.setValue(FormaPagamento.PIX);
                 var pix=(com.salgaderia.app.util.PixPainel)loader.getNamespace().get("pixCheckout");
-                assertTrue(pix.isVisible());assertTrue(((Label)pix.getChildren().get(0)).getText().contains("21,60"));
+                assertTrue(pix.isVisible());assertTrue(((Label)pix.getChildren().get(0)).getText().contains("24,60"));
                 assertTrue(pix.lookup("#pix-copiar").isVisible());
                 pagamento.setValue(FormaPagamento.CARTAO);assertFalse(((Button)loader.getNamespace().get("finalizar")).isDisabled());return null;
             });
@@ -109,6 +114,7 @@ class VitrineJavaFXTest {
             aguardar(()->pedidos.enviado.get()!=null);
             aguardar(()->fx(()->((Label)loader.getNamespace().get("contador")).getText().equals("0 itens")));
             assertEquals(TipoEntrega.ENTREGA,pedidos.enviado.get().getTipoEntrega());
+            assertEquals(1L,pedidos.enviado.get().getBairroId());
             assertEquals(FormaPagamento.CARTAO,pedidos.enviado.get().getFormaPagamento());
             assertEquals("UIKFOMI10",pedidos.codigo.get());
             assertEquals("Rua das Flores",pedidos.enviado.get().getEnderecoEntrega());
@@ -134,7 +140,7 @@ class VitrineJavaFXTest {
             FXMLLoader l=new FXMLLoader(getClass().getResource("/fxml/cliente-vitrine.fxml"));
             l.setControllerFactory(c->new ClienteVitrineController(new ProdutosTeste(List.of(produto)),pedidos,new AvaliacoesTeste(),
                     new com.salgaderia.app.service.impl.ClubeServiceImpl(),new com.salgaderia.app.service.impl.GamificacaoServiceImpl(),
-                    com.salgaderia.app.service.pix.PixPagamentoService.demonstracao(),config::get));
+                    com.salgaderia.app.service.pix.PixPagamentoService.demonstracao(),config::get,List::of));
             Stage s=new Stage();s.setScene(new Scene(l.load(),1000,700));s.show();referencia.set(s);
             var cliente=new Cliente(10L,"Ana",null,null,null,null,null);
             ((ClienteVitrineController)l.getController()).definirUsuario(new UsuarioCliente(20L,"Ana","ana","senha",true,cliente));
@@ -397,7 +403,7 @@ class VitrineJavaFXTest {
     }
     private static ClienteVitrineController vitrineTeste(ProdutoEstoqueService produtos,PedidoVendaService pedidos,AvaliacaoService avaliacoes){
         return new ClienteVitrineController(produtos,pedidos,avaliacoes,new com.salgaderia.app.service.impl.ClubeServiceImpl(),
-                new com.salgaderia.app.service.impl.GamificacaoServiceImpl(),com.salgaderia.app.service.pix.PixPagamentoService.demonstracao(),VitrineJavaFXTest::lojaAberta);
+                new com.salgaderia.app.service.impl.GamificacaoServiceImpl(),com.salgaderia.app.service.pix.PixPagamentoService.demonstracao(),VitrineJavaFXTest::lojaAberta, () -> List.of(new BairroEntrega(1L,"Centro",new BigDecimal("3.00"),25,true)));
     }
     private static ConfiguracaoLoja lojaAberta(){
         return new ConfiguracaoLoja(true,java.time.LocalTime.of(8,0),java.time.LocalTime.of(23,0),false);
@@ -418,8 +424,8 @@ class VitrineJavaFXTest {
         final List<Pedido> dados;final java.util.concurrent.atomic.AtomicReference<Pedido> enviado=new java.util.concurrent.atomic.AtomicReference<>();final java.util.concurrent.atomic.AtomicReference<String> codigo=new java.util.concurrent.atomic.AtomicReference<>();
         PedidosTeste(List<Pedido> dados){this.dados=dados;}
         public List<PedidoFila> listarFila(){return List.of();} public long finalizarPdv(Pedido p,FormaPagamento f,BigDecimal r){throw new UnsupportedOperationException();}
-        public List<Pedido> listarDoCliente(UsuarioCliente u){return dados;}public long finalizar(Pedido p){enviado.set(p);return 77;}public void transicionar(long id,StatusPedido s,String entregador){throw new UnsupportedOperationException();}
-        public com.salgaderia.app.service.desconto.ResultadoDesconto simular(Pedido p,String c){var cupom="UIKFOMI10".equals(c)?new com.salgaderia.app.service.desconto.Cupom(c,BigDecimal.TEN,BigDecimal.ZERO):null;return new com.salgaderia.app.service.desconto.CalculadoraDescontos().calcular(new com.salgaderia.app.service.desconto.ContextoDesconto(p.getItens(),0,cupom));}
+        public List<Pedido> listarDoCliente(UsuarioCliente u){return dados;}public long finalizar(Pedido p){enviado.set(p);return 77;}public void transicionar(long id,StatusPedido s){throw new UnsupportedOperationException();} public String despachar(long id, long parceiro){throw new UnsupportedOperationException();}
+        public com.salgaderia.app.service.desconto.ResultadoDesconto simular(Pedido p,String c){var cupom="UIKFOMI10".equals(c)?new com.salgaderia.app.service.desconto.Cupom(c,BigDecimal.TEN,BigDecimal.ZERO):null;return new com.salgaderia.app.service.desconto.CalculadoraDescontos().calcular(new com.salgaderia.app.service.desconto.ContextoDesconto(p.getItens(),0,cupom,BigDecimal.ZERO, p.getTipoEntrega()==TipoEntrega.ENTREGA?new BigDecimal("3.00"):BigDecimal.ZERO)).comPrazo(25);}
         public long finalizar(Pedido p,String c,com.salgaderia.app.service.desconto.ResultadoDesconto d){codigo.set(c);return finalizar(p);}
         public long finalizarPdv(Pedido p,FormaPagamento f,BigDecimal r,String c,com.salgaderia.app.service.desconto.ResultadoDesconto d){return finalizarPdv(p,f,r);}
     }

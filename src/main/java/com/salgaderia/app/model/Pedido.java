@@ -29,6 +29,15 @@ public class Pedido {
     private String emailPix,documentoPix;
     private boolean pixDemonstracao;
     private String nomeEntregador;
+    private Long bairroId, entregadorId;
+    private Integer tempoEstimadoMin;
+
+    public Long getBairroId() { return bairroId; }
+    public void setBairroId(Long id) { bairroId = Validacao.id(id); }
+    public Long getEntregadorId() { return entregadorId; }
+    public void setEntregadorId(Long id) { entregadorId = Validacao.id(id); }
+    public Integer getTempoEstimadoMin() { return tempoEstimadoMin; }
+    public void setTempoEstimadoMin(Integer minutos) { tempoEstimadoMin = minutos; }
 
     public Pedido(Long id, Usuario usuario, Cliente cliente, StatusPedido status, TipoEntrega tipoEntrega,
                   String enderecoEntrega, LocalDateTime criadoEm, List<PedidoItem> itens) {

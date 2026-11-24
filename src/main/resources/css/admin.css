@@ -36,3 +36,13 @@
     -fx-text-fill: #542709;
     -fx-font-weight: bold;
 }
+
+.admin-card:atrasado {
+    -fx-background-color: #fff0ef;
+    -fx-border-color: #b91c1c;
+    -fx-border-width: 2;
+}
+.pedido-atraso-titulo {
+    -fx-text-fill: #991b1b;
+    -fx-font-weight: bold;
+}

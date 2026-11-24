@@ -6,6 +6,8 @@ Reúne testes automatizados dos componentes presentes neste pacote.
 
 Execute os testes compatíveis com o ambiente; os testes de integração podem exigir banco ou display.
 
+O teste de operação com MySQL valida cotação com chuva, revalidação de prazo, vínculo do entregador e total de taxas no período.
+
 ## Explore as subpastas e arquivos
 
 | Caminho | Conteúdo e responsabilidade |

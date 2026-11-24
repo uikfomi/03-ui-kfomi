@@ -14,7 +14,7 @@ O arquivo database.local.properties é local e ignorado pelo Git; verifique se a
 | [fxml/](fxml/) | Descrições de interface JavaFX. [Abrir guia](fxml/README.md). |
 | [icons/](icons/) | Espaço reservado para ícones. |
 | [images/](images/) | Espaço reservado para imagens. |
-| [database.properties](database.properties) | Template JDBC e propriedades opcionais de taxa de entrega e pagamentos PIX. |
+| [database.properties](database.properties) | Template JDBC e propriedades opcionais de pagamento PIX. |
 | [README.md](README.md) | Guia de navegação e explicações desta pasta. |
 
 ## Árvore estrutural comentada
@@ -42,7 +42,7 @@ src/main/resources/  # Agrupa telas FXML, estilos e configuração padrão consu
 │   └── .gitkeep  # Marcador que mantém a pasta no controle de versão; não contém dados de aplicação.
 ├── images/  # Espaço reservado para imagens.
 │   └── .gitkeep  # Marcador que mantém a pasta no controle de versão; não contém dados de aplicação.
-├── database.properties  # Template JDBC e propriedades opcionais de taxa de entrega e pagamentos PIX.
+├── database.properties  # Template JDBC e propriedades opcionais de pagamento PIX.
 └── README.md  # Guia de navegação e explicações desta pasta.
 ```
 

@@ -88,6 +88,10 @@
             <RadioButton fx:id="entrega" text="Entrega" />
             <RadioButton fx:id="local" text="Consumir no Local" />
             <Label fx:id="endereco" wrapText="true" styleClass="subtitle" />
+            <VBox fx:id="selecaoBairro" spacing="5" visible="false" managed="false">
+                <Label text="Bairro de entrega" styleClass="field-label" />
+                <ComboBox fx:id="bairroEntrega" promptText="Selecione o bairro" maxWidth="Infinity" />
+            </VBox>
             <CheckBox fx:id="agendar" text="Agendar para Evento/Festa" />
             <DatePicker fx:id="dataAgendamento" promptText="Data do evento" />
             <TextField fx:id="horaAgendamento" promptText="Horário (HH:mm)" />

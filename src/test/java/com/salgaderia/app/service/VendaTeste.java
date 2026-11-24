@@ -23,6 +23,9 @@ final class VendaTeste {
         return auth.atualizarPerfil(usuario,nome,contato.getWhatsapp(),contato.getEndereco());
     }
 
+    static long bairroCentro() {
+        return new LogisticaService().bairros(false).stream().filter(b -> b.nome().equals("Centro")).findFirst().orElseThrow().id();
+    }
     static PedidoVendaServiceImpl vendas() { return vendas(PixPagamentoService.demonstracao()); }
     static PedidoVendaServiceImpl vendas(PixPagamentoService pix) {
         return vendas(new MovimentacaoEstoqueDAOImpl(),pix,ABERTA);
@@ -35,6 +38,7 @@ final class VendaTeste {
             public ConfiguracaoLoja buscar(Connection c,boolean bloquear) { return config; }
             public void salvarExpediente(Connection c,ConfiguracaoLoja nova) { throw new UnsupportedOperationException(); }
             public void definirPedidoMinimo(Connection c,java.math.BigDecimal valor) { throw new UnsupportedOperationException(); }
+            public void definirModoChuva(Connection c,boolean ativo) { throw new UnsupportedOperationException(); }
             public void definirAberturaManual(Connection c,boolean aberta) { throw new UnsupportedOperationException(); }
         };
         return new OperacaoLojaService(dao,Clock.fixed(AGORA.atZone(FORTALEZA).toInstant(),FORTALEZA));

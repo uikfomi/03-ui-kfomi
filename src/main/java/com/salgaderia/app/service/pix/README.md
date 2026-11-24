@@ -10,7 +10,7 @@ Separa as chamadas HTTP do checkout e da persistência JDBC. A venda reserva o e
 |---|---|
 | [LocalDemoPixGateway.java](LocalDemoPixGateway.java) | Gera BR Code de demonstração não pagável e não retorna aprovação automática. |
 | [MercadoPagoPixGateway.java](MercadoPagoPixGateway.java) | Traduz a solicitação para JSON e chama a API com `HttpClient`, autenticação e idempotência. |
-| [PixConfiguracao.java](PixConfiguracao.java) | Lê o token ignorado pelo Git e a taxa de entrega; não envia requisições durante a leitura. |
+| [PixConfiguracao.java](PixConfiguracao.java) | Lê o token ignorado pelo Git sem enviar requisições. |
 | [PixGatewayService.java](PixGatewayService.java) | Define a porta de criação e consulta utilizada pelo serviço de pagamento. |
 | [PixPagamentoService.java](PixPagamentoService.java) | Valida os dados e a titularidade, vincula o ID, concilia a cobrança e aplica os efeitos locais em transação. |
 | [README.md](README.md) | Guia da integração PIX da vitrine. |

@@ -6,6 +6,8 @@ Declara a estrutura visual das telas carregadas pelo JavaFX.
 
 Mantenha as responsabilidades desta camada separadas das demais e consulte os arquivos relacionados antes de alterações.
 
+A vitrine inclui o seletor de bairros; o painel administrativo dá acesso aos cadastros de logística.
+
 ## Explore as subpastas e arquivos
 
 | Caminho | Conteúdo e responsabilidade |

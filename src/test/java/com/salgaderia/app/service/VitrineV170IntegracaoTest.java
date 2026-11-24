@@ -117,6 +117,7 @@ class VitrineV170IntegracaoTest {
     private static Pedido pedido(UsuarioCliente cliente, TipoEntrega modalidade, PedidoItem item) {
         var p = new Pedido(null,cliente,cliente.getCliente(),StatusPedido.PENDENTE,modalidade,
                 modalidade.exigeEndereco() ? cliente.getCliente().getEndereco() : null,VendaTeste.AGORA,List.of(item));
+        if (modalidade == TipoEntrega.ENTREGA) p.setBairroId(VendaTeste.bairroCentro());
         p.setFormaPagamento(FormaPagamento.DINHEIRO);
         return p;
     }

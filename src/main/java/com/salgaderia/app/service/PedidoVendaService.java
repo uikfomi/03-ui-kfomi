@@ -10,10 +10,8 @@ public interface PedidoVendaService {
     long finalizar(Pedido pedido, String codigo, com.salgaderia.app.service.desconto.ResultadoDesconto esperado);
     long finalizarPdv(Pedido pedido, com.salgaderia.app.model.enums.FormaPagamento forma, java.math.BigDecimal recebido,
                       String codigo, com.salgaderia.app.service.desconto.ResultadoDesconto esperado);
-    default void transicionar(long pedidoId, com.salgaderia.app.model.enums.StatusPedido destino) {
-        transicionar(pedidoId,destino,null);
-    }
-    void transicionar(long pedidoId, com.salgaderia.app.model.enums.StatusPedido destino, String entregador);
+    void transicionar(long pedidoId, com.salgaderia.app.model.enums.StatusPedido destino);
+    String despachar(long pedidoId, long entregadorId);
     void cancelarDoCliente(com.salgaderia.app.model.UsuarioCliente cliente, long pedidoId);
     long contarFilaCozinha();
     java.util.List<com.salgaderia.app.model.PedidoItem> repetirUltimoPedido(com.salgaderia.app.model.UsuarioCliente usuario);

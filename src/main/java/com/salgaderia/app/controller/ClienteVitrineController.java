@@ -58,6 +58,8 @@ public class ClienteVitrineController implements TelaAutenticada {
     @FXML private VBox dadosPagadorPix;
     @FXML private TextField emailPix,documentoPix;
     @FXML private ComboBox<FiltroCategoria> categorias;
+    @FXML private VBox selecaoBairro;
+    @FXML private ComboBox<OpcaoBairro> bairroEntrega;
     @FXML private ComboBox<FormaPagamento> formaPagamento;
     @FXML private FlowPane cards;
     @FXML private FlowPane galeriaFotos;
@@ -84,7 +86,13 @@ public class ClienteVitrineController implements TelaAutenticada {
     private ConfiguracaoLoja configuracao;
     private boolean consultandoLoja;
     private long geracaoLoja;
-    private record OperacaoAtual(ConfiguracaoLoja config, Set<Long> produtosLiberados) { }
+    private final java.util.function.Supplier<List<BairroEntrega>> consultarBairros;
+    private List<BairroEntrega> bairrosAtivos = List.of();
+    private boolean carregouBairros, atualizandoBairros;
+    private record OpcaoBairro(BairroEntrega bairro) {
+        @Override public String toString() { return bairro == null ? "Outro bairro / Fora da área" : bairro.nome(); }
+    }
+    private record OperacaoAtual(ConfiguracaoLoja config, Set<Long> produtosLiberados, List<BairroEntrega> bairros) { }
     private final Map<ChaveCarrinho,List<PedidoItem>> carrinho = new LinkedHashMap<>();
     private final PersonalizacaoService personalizacoes = new PersonalizacaoService();
     private List<Produto> produtos = List.of();
@@ -120,6 +128,13 @@ public class ClienteVitrineController implements TelaAutenticada {
     ClienteVitrineController(ProdutoEstoqueService produtos,PedidoVendaService pedidos,AvaliacaoService avaliacoes,
                              ClubeService clube,GamificacaoService gamificacao,PixPagamentoService pagamentosPix,
                              java.util.function.Supplier<ConfiguracaoLoja> consultarOperacao) {
+        this(produtos,pedidos,avaliacoes,clube,gamificacao,pagamentosPix,consultarOperacao,() -> new LogisticaService().bairros(true));
+    }
+    ClienteVitrineController(ProdutoEstoqueService produtos,PedidoVendaService pedidos,AvaliacaoService avaliacoes,
+                             ClubeService clube,GamificacaoService gamificacao,PixPagamentoService pagamentosPix,
+                             java.util.function.Supplier<ConfiguracaoLoja> consultarOperacao,
+                             java.util.function.Supplier<List<BairroEntrega>> consultarBairros) {
+        this.consultarBairros=Objects.requireNonNull(consultarBairros);
         this.consultarOperacao=Objects.requireNonNull(consultarOperacao);
         this.produtosService=Objects.requireNonNull(produtos);this.pedidosService=Objects.requireNonNull(pedidos);this.avaliacoesService=Objects.requireNonNull(avaliacoes);
         this.clube=Objects.requireNonNull(clube);this.gamificacao=Objects.requireNonNull(gamificacao);
@@ -154,6 +169,9 @@ public class ClienteVitrineController implements TelaAutenticada {
             });
         });
         ToggleGroup grupo=new ToggleGroup();retirada.setToggleGroup(grupo);entrega.setToggleGroup(grupo);local.setToggleGroup(grupo);retirada.setSelected(true);
+        selecaoBairro.visibleProperty().bind(entrega.selectedProperty());
+        selecaoBairro.managedProperty().bind(selecaoBairro.visibleProperty());
+        bairroEntrega.valueProperty().addListener((o,a,n)->{if(!atualizandoBairros)simularDesconto();});
         agendar.selectedProperty().addListener((o,a,n)->atualizarCheckout());
         dataAgendamento.disableProperty().bind(agendar.selectedProperty().not());
         horaAgendamento.disableProperty().bind(agendar.selectedProperty().not());
@@ -181,12 +199,16 @@ public class ClienteVitrineController implements TelaAutenticada {
         Task<OperacaoAtual> tarefa=new Task<>(){
             @Override protected OperacaoAtual call(){
                 return new OperacaoAtual(consultarOperacao.get(),produtosService.listar().stream()
-                        .filter(Produto::isDisponivelVenda).map(Produto::getId).collect(java.util.stream.Collectors.toSet()));
+                        .filter(Produto::isDisponivelVenda).map(Produto::getId).collect(java.util.stream.Collectors.toSet()),consultarBairros.get());
             }
         };
         tarefa.setOnSucceeded(e->{
             consultandoLoja=false;if(geracao!=geracaoLoja)return;
+            ConfiguracaoLoja anterior = configuracao;
             configuracao=tarefa.getValue().config();
+            var bairros = tarefa.getValue().bairros();
+            boolean mudouFrete = !carregouBairros || !bairrosAtivos.equals(bairros) || !Objects.equals(anterior, configuracao);
+            if (!carregouBairros || !bairrosAtivos.equals(bairros)) atualizarBairros(bairros);
             if(carregouProdutos&&catalogo==geracaoProdutos){
                 Set<Long> liberados=tarefa.getValue().produtosLiberados();
                 boolean mudou=false;
@@ -199,14 +221,37 @@ public class ClienteVitrineController implements TelaAutenticada {
                     Produto p=i.getProduto();boolean disponivel=liberados.contains(p.getId());
                     mudou|=p.isDisponivelVenda()!=disponivel;p.setDisponivelVenda(disponivel);
                 }
-                if(mudou){filtrar();atualizarCarrinho();}
+                if(mudou){filtrar();atualizarCarrinho();mudouFrete=false;}
             }
-            statusLoja.setText(operacao.rotulo(configuracao));atualizarCheckout();
+            statusLoja.setText(operacao.rotulo(configuracao));
+            if (mudouFrete && entrega.isSelected()) simularDesconto(); else atualizarCheckout();
         });
         tarefa.setOnFailed(e->{consultandoLoja=false;if(geracao==geracaoLoja){
             configuracao=null;statusLoja.setText("Não foi possível consultar o horário da loja.");atualizarCheckout();
         }});
         iniciar(tarefa);
+    }
+    private void atualizarBairros(List<BairroEntrega> bairros) {
+        var anterior = bairroEntrega.getValue();
+        bairrosAtivos = List.copyOf(bairros);
+        carregouBairros = true;
+        atualizandoBairros = true;
+        bairroEntrega.getItems().setAll(bairros.stream().map(OpcaoBairro::new).toList());
+        var fora = new OpcaoBairro(null);
+        bairroEntrega.getItems().add(fora);
+        bairroEntrega.setValue(anterior == null ? null : anterior.bairro() == null ? fora : bairroEntrega.getItems().stream()
+                .filter(o -> o.bairro() != null && Objects.equals(o.bairro().id(), anterior.bairro().id())).findFirst().orElse(null));
+        atualizandoBairros = false;
+    }
+    private BairroEntrega bairroSelecionado() {
+        var opcao = bairroEntrega.getValue();
+        return opcao == null ? null : opcao.bairro();
+    }
+    private boolean entregaInvalida() {
+        return entrega.isSelected() && (usuarioSemEndereco() || bairroSelecionado() == null);
+    }
+    private boolean usuarioSemEndereco() {
+        return usuario == null || usuario.getCliente().getEndereco() == null || usuario.getCliente().getEndereco().isBlank();
     }
     private void atualizarCheckout(){
         boolean fechada=configuracao!=null&&!operacao.estaAberta(configuracao);
@@ -216,7 +261,7 @@ public class ClienteVitrineController implements TelaAutenticada {
                 : OperacaoLojaService.faltaParaEntrega(configuracao, modalidade(), itensDoCarrinho());
         if (falta.signum() > 0) exibir(mensagemMinimo,"Adicione mais " + moeda(falta) + " para atingir o mínimo de entrega, sem frete.");
         else ocultar(mensagemMinimo);
-        finalizar.setDisable(descontoAtual==null||formaPagamento.getValue()==null||configuracao==null||(fechada&&!agendar.isSelected())||falta.signum()>0);
+        finalizar.setDisable(descontoAtual==null||formaPagamento.getValue()==null||configuracao==null||(fechada&&!agendar.isSelected())||falta.signum()>0||entregaInvalida());
     }
     @FXML private void mostrarVitrine(){atualizacaoPedidos.stop();geracaoPedidos++;mostrarPainel(painelVitrine);simularDesconto();}
     @FXML private void mostrarPedidos(){mostrarPainel(painelPedidos);carregarPedidos();atualizacaoPedidos.playFromStart();}
@@ -603,20 +648,36 @@ public class ClienteVitrineController implements TelaAutenticada {
     private Pedido pedidoAtual(){
         TipoEntrega tipo=modalidade();
         String enderecoEntrega=tipo==TipoEntrega.ENTREGA?usuario.getCliente().getEndereco():null;
-        if(tipo==TipoEntrega.ENTREGA&&(enderecoEntrega==null||enderecoEntrega.isBlank())) tipo=TipoEntrega.RETIRADA;
-        return new Pedido(null,usuario,usuario.getCliente(),StatusPedido.PENDENTE,tipo,enderecoEntrega,LocalDateTime.now(),itensDoCarrinho());
+        Pedido pedido = new Pedido(null,usuario,usuario.getCliente(),StatusPedido.PENDENTE,tipo,enderecoEntrega,LocalDateTime.now(),itensDoCarrinho());
+        if (tipo == TipoEntrega.ENTREGA) pedido.setBairroId(bairroSelecionado().id());
+        return pedido;
     }
     private void simularDesconto(){
         long geracao=++geracaoDesconto;descontoAtual=null;atualizarCheckout();
         atualizarPix();
         ocultar(mensagemFrete);
-        if(usuario==null||carrinho.isEmpty()){mensagemDesconto.setText("");return;}
+        if (entrega.isSelected()) {
+            if (bairroSelecionado() == null) {
+                exibir(mensagemFrete, !carregouBairros ? "Aguardando a lista de bairros atendidos."
+                        : bairroEntrega.getValue() != null || bairrosAtivos.isEmpty() ? "Entrega indisponível para esta região. Retire seu pedido no local."
+                        : "Selecione o bairro de entrega.");
+            } else if (configuracao != null) {
+                var cotacao = LogisticaService.cotar(bairroSelecionado(), configuracao);
+                exibir(mensagemFrete, "Frete antes dos benefícios: " + moeda(cotacao.taxa()) + " · " + cotacao.minutos() + " min"
+                        + (configuracao.modoChuvaAtivo() ? " · Chuva/Pico" : ""));
+            }
+        }
+        if(usuario==null||carrinho.isEmpty()||entregaInvalida()){mensagemDesconto.setText("");return;}
         mensagemDesconto.setText("Calculando melhor desconto...");
         Pedido pedido=pedidoAtual();String codigo=cupom.getText();
         Task<ResultadoDesconto> tarefa=new Task<>(){@Override protected ResultadoDesconto call(){return pedidosService.simular(pedido,codigo);}};
         tarefa.setOnSucceeded(e->{if(geracao!=geracaoDesconto)return;descontoAtual=tarefa.getValue();total.setText(moeda(descontoAtual.total()));
-            if(descontoAtual.freteGratisVip())exibir(mensagemFrete,"Frete grátis · Clube VIP");
-            else if(descontoAtual.taxaEntrega().signum()>0)exibir(mensagemFrete,"Taxa de entrega: "+moeda(descontoAtual.taxaEntrega()));
+            if (pedido.getTipoEntrega() == TipoEntrega.ENTREGA) {
+                String frete = descontoAtual.freteGratisVip() ? "Frete grátis · Clube VIP"
+                        : "FRETE".equals(descontoAtual.estrategia()) ? "Frete grátis · Roleta" : "Taxa de entrega: " + moeda(descontoAtual.taxaEntrega());
+                exibir(mensagemFrete, frete + " · " + descontoAtual.tempoEstimadoMin() + " min"
+                        + (configuracao != null && configuracao.modoChuvaAtivo() ? " · Chuva/Pico" : ""));
+            }
             mensagemDesconto.setText(descontoAtual.brinde()!=null?"Brinde: "+descontoAtual.brinde():
                     "PONTOS_DOBRO".equals(descontoAtual.estrategia())?"Prêmio aplicado: pontos em dobro":
                     "Desconto: "+moeda(descontoAtual.desconto())+" ("+descontoAtual.estrategia()+")");
@@ -664,9 +725,8 @@ public class ClienteVitrineController implements TelaAutenticada {
     @FXML private void finalizar(){
         if(carrinho.isEmpty()||usuario==null||descontoAtual==null||formaPagamento.getValue()==null)return;
         TipoEntrega tipo=modalidade();
-        String enderecoEntrega=tipo==TipoEntrega.ENTREGA?usuario.getCliente().getEndereco():null;
-        if(tipo==TipoEntrega.ENTREGA&&(enderecoEntrega==null||enderecoEntrega.isBlank())){avisar(Alert.AlertType.WARNING,"Endereço necessário","Seu cadastro não possui endereço. Escolha retirada ou informe o endereço em Meu perfil.");return;}
-        Pedido pedido=new Pedido(null,usuario,usuario.getCliente(),StatusPedido.PENDENTE,tipo,enderecoEntrega,LocalDateTime.now(),itensDoCarrinho());
+        if (entregaInvalida()) return;
+        Pedido pedido = pedidoAtual();
         pedido.setFormaPagamento(formaPagamento.getValue());
         if(pedido.getFormaPagamento()==FormaPagamento.PIX&&pagamentosPix.usaMercadoPago())
             pedido.setPagadorPix(emailPix.getText(),documentoPix.getText());
@@ -698,7 +758,7 @@ public class ClienteVitrineController implements TelaAutenticada {
             carregarCupons();carregarProdutos();mostrarPedidos();});
         tarefa.setOnFailed(e->{raiz.setDisable(false);Throwable erro=tarefa.getException();
             if(erro instanceof IllegalArgumentException)avisar(Alert.AlertType.WARNING,"Pedido não finalizado",erro.getMessage());
-            else avisar(Alert.AlertType.ERROR,"Não foi possível finalizar","Verifique sua conexão e tente novamente. Seu carrinho foi preservado.");carregarProdutos();});iniciar(tarefa);
+            else avisar(Alert.AlertType.ERROR,"Não foi possível finalizar","Verifique sua conexão e tente novamente. Seu carrinho foi preservado.");carregarProdutos();atualizarLoja();simularDesconto();});iniciar(tarefa);
     }
     @FXML private void carregarPedidos(){atualizarPedidos(true);}
     private void atualizarPedidos(boolean inicial){
@@ -728,6 +788,7 @@ public class ClienteVitrineController implements TelaAutenticada {
             banner.setId("entrega-em-rota-"+pedido.getId());banner.getStyleClass().add("entrega-em-rota");
             banner.setMaxWidth(Double.MAX_VALUE);card.getChildren().add(banner);
         }
+        if(pedido.getTempoEstimadoMin()!=null)card.getChildren().add(textoClube("Prazo estimado no pedido: " + pedido.getTempoEstimadoMin() + " min"));
         if(pedido.getAgendadoPara()!=null)card.getChildren().add(new Label("Agendado: "+pedido.getAgendadoPara().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"))));
         Set<UUID> gruposExibidos=new HashSet<>();
         for(PedidoItem item:pedido.getItens()){

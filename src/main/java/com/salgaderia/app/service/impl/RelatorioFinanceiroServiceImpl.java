@@ -7,6 +7,10 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Objects;
 public class RelatorioFinanceiroServiceImpl implements RelatorioFinanceiroService {
+    private final com.salgaderia.app.service.LogisticaService logistica = new com.salgaderia.app.service.LogisticaService();
+    @Override public java.util.List<com.salgaderia.app.model.RepasseEntregador> repasses(LocalDateTime inicio, LocalDateTime fim) {
+        return logistica.repasses(inicio, fim);
+    }
     private final PedidoDAO pedidos;private final MovimentacaoEstoqueDAO movimentos;
     public RelatorioFinanceiroServiceImpl(){this(new PedidoDAOImpl(),new MovimentacaoEstoqueDAOImpl());}
     public RelatorioFinanceiroServiceImpl(PedidoDAO pedidos,MovimentacaoEstoqueDAO movimentos){this.pedidos=Objects.requireNonNull(pedidos);this.movimentos=Objects.requireNonNull(movimentos);}

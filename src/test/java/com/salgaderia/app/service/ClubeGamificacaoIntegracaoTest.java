@@ -48,6 +48,7 @@ class ClubeGamificacaoIntegracaoTest {
             assertEquals("ASSINANTE",fixture.vendas.simular(pedido,"UIKFOMI10").estrategia());
             var entrega=new Pedido(null,cliente,cliente.getCliente(),StatusPedido.PENDENTE,TipoEntrega.ENTREGA,"Endereço teste",
                     LocalDateTime.now(),fixture.pedido(cliente,2).getItens());
+            entrega.setBairroId(VendaTeste.bairroCentro());
             entrega.setFormaPagamento(FormaPagamento.DINHEIRO);
             var comFrete=fixture.vendas.simular(entrega,null);
             assertEquals(0,comFrete.taxaEntrega().signum());
@@ -112,6 +113,7 @@ class ClubeGamificacaoIntegracaoTest {
             assertThrows(IllegalArgumentException.class,()->fixture.vendas.simular(fixture.pedido(recebeFrete,3),frete));
             var entrega=new Pedido(null,recebeFrete,recebeFrete.getCliente(),StatusPedido.PENDENTE,TipoEntrega.ENTREGA,"Endereço de teste",
                     LocalDateTime.now(),List.of(new PedidoItem(null,fixture.produto,new BigDecimal("3"),fixture.produto.getPrecoVenda())));
+            entrega.setBairroId(VendaTeste.bairroCentro());
             entrega.setFormaPagamento(FormaPagamento.DINHEIRO);
             var antes=fixture.vendas.simular(entrega,null);
             if(antes.taxaEntrega().signum()>0){

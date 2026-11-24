@@ -24,12 +24,14 @@ class OperacaoV162IntegracaoTest {
         try(Connection c=ConnectionFactory.getConnection()){
             c.setAutoCommit(false);
             try{
-                var minimo = dao.buscar(c,false).pedidoMinimoEntrega();
+                var atual = dao.buscar(c,false);
+                var minimo = atual.pedidoMinimoEntrega();
+                dao.definirModoChuva(c,true);
                 dao.definirAberturaManual(c,false);
                 dao.salvarExpediente(c,new ConfiguracaoLoja(true,LocalTime.of(18,0),LocalTime.of(1,0),true));
-                assertEquals(new ConfiguracaoLoja(false,LocalTime.of(18,0),LocalTime.of(1,0),true,minimo),dao.buscar(c,true));
+                assertEquals(new ConfiguracaoLoja(false,LocalTime.of(18,0),LocalTime.of(1,0),true,minimo,true,atual.acrescimoTempoChuvaMin(),atual.acrescimoTaxaChuva()),dao.buscar(c,true));
                 dao.definirAberturaManual(c,true);
-                assertEquals(new ConfiguracaoLoja(true,LocalTime.of(18,0),LocalTime.of(1,0),true,minimo),dao.buscar(c,true));
+                assertEquals(new ConfiguracaoLoja(true,LocalTime.of(18,0),LocalTime.of(1,0),true,minimo,true,atual.acrescimoTempoChuvaMin(),atual.acrescimoTaxaChuva()),dao.buscar(c,true));
             }finally{c.rollback();}
         }
     }
@@ -43,6 +45,15 @@ class OperacaoV162IntegracaoTest {
         var usuario=VendaTeste.cadastrar("Cliente teste","oper"+chave,"senha-teste",cliente);
         var produto=new Produto(null,null,"Coxinha "+chave,null,new BigDecimal("5.00"),BigDecimal.ONE,BigDecimal.ZERO,BigDecimal.ZERO,null);
         var admin=new UsuarioAdmin(2L,"Admin","admin","não utilizada",true);
+        var logistica = new LogisticaService();
+        String parceiro = "José " + chave;
+        logistica.salvar(new Entregador(null, parceiro, null, null, false));
+        var chuvosa = new ConfiguracaoLoja(false, LocalTime.of(18,0), LocalTime.of(1,0), true, BigDecimal.ZERO, true, 15, new BigDecimal("2.00"));
+        var vendasChuva = VendaTeste.vendas(new MovimentacaoEstoqueDAOImpl(),PixPagamentoService.demonstracao(),chuvosa);
+        String nomeBairro = "Bairro " + chave;
+        logistica.salvar(new BairroEntrega(null, nomeBairro, new BigDecimal("3.00"), 25, true));
+        var bairro = logistica.bairros(false).stream().filter(b -> b.nome().equals(nomeBairro)).findFirst().orElseThrow();
+        var entregador = logistica.entregadores(false).stream().filter(e -> e.nome().equals(parceiro)).findFirst().orElseThrow();
         List<Long> pdvIds=new ArrayList<>();
         try{
             estoque.cadastrar(produto);
@@ -52,10 +63,25 @@ class OperacaoV162IntegracaoTest {
             assertThrows(IllegalArgumentException.class,()->vendas.finalizar(entrega));
             assertNull(entrega.getId());assertTrue(vendas.listarDoCliente(usuario).isEmpty());
             entrega.setAgendadoPara(VendaTeste.AGORA.toLocalDate().plusDays(1).atTime(0,30));
-            var cotacao=vendas.simular(entrega,null);
+            assertThrows(IllegalArgumentException.class, () -> vendas.simular(entrega,null));
+            entrega.setBairroId(bairro.id());
+            var cotacaoSeca=vendas.simular(entrega,null);
+            assertEquals(25,cotacaoSeca.tempoEstimadoMin());
+            assertEquals(new BigDecimal("3.00"),cotacaoSeca.taxaEntrega());
+            var cotacaoChuva=vendasChuva.simular(entrega,null);
+            assertEquals(40,cotacaoChuva.tempoEstimadoMin());
+            assertEquals(new BigDecimal("5.00"),cotacaoChuva.taxaEntrega());
+            assertThrows(IllegalArgumentException.class, () -> vendasChuva.finalizar(entrega,null,cotacaoSeca));
+            logistica.salvar(new BairroEntrega(bairro.id(), nomeBairro, bairro.taxaEntrega(), 25, false));
+            assertFalse(logistica.bairros(true).contains(bairro));
+            assertThrows(IllegalArgumentException.class, () -> vendasChuva.finalizar(entrega,null,cotacaoChuva));
+            logistica.salvar(new BairroEntrega(bairro.id(), nomeBairro, bairro.taxaEntrega(), 30, true));
+            assertThrows(IllegalArgumentException.class, () -> vendasChuva.finalizar(entrega,null,cotacaoChuva));
+            var cotacao=vendasChuva.simular(entrega,null);
+            assertEquals(45, cotacao.tempoEstimadoMin());
             assertTrue(estoque.alternarDisponibilidade(produto.getId()));
             assertThrows(ProdutoIndisponivelException.class,()->vendas.simular(entrega,null));
-            assertThrows(ProdutoIndisponivelException.class,()->vendas.finalizar(entrega,null,cotacao));
+            assertThrows(ProdutoIndisponivelException.class,()->vendasChuva.finalizar(entrega,null,cotacao));
             var vendaPdv=pedido(admin,null,produto,TipoEntrega.RETIRADA);
             assertThrows(ProdutoIndisponivelException.class,()->vendas.finalizarPdv(vendaPdv,FormaPagamento.DINHEIRO,BigDecimal.TEN));
             assertNull(entrega.getId());assertNull(vendaPdv.getId());
@@ -63,25 +89,35 @@ class OperacaoV162IntegracaoTest {
             assertFalse(estoque.buscarPorId(produto.getId()).orElseThrow().isDisponivelVenda());
             assertTrue(estoque.alternarDisponibilidade(produto.getId()));
             pdvIds.add(vendas.finalizarPdv(vendaPdv,FormaPagamento.DINHEIRO,BigDecimal.TEN));
-            long id=vendas.finalizar(entrega,null,cotacao);
+            long id=vendasChuva.finalizar(entrega,null,cotacao);
+            var emFila = vendas.listarFila().stream().filter(p -> p.id() == id).findFirst().orElseThrow();
+            assertEquals(nomeBairro, emFila.bairro());
+            assertEquals(45, emFila.tempoEstimadoMin());
+            assertFalse(emFila.atrasadoEm(VendaTeste.AGORA.plusMinutes(45)));
+            assertTrue(emFila.atrasadoEm(VendaTeste.AGORA.plusMinutes(45).plusSeconds(1)));
             vendas.transicionar(id,StatusPedido.PREPARANDO);vendas.transicionar(id,StatusPedido.PRONTO);
             assertThrows(IllegalStateException.class,()->vendas.transicionar(id,StatusPedido.ENTREGUE));
-            assertThrows(IllegalArgumentException.class,()->vendas.transicionar(id,StatusPedido.SAIU_ENTREGA," "));
-            assertThrows(IllegalArgumentException.class,()->vendas.transicionar(id,StatusPedido.SAIU_ENTREGA,"a".repeat(101)));
-            vendas.transicionar(id,StatusPedido.SAIU_ENTREGA,"  José  ");
-            assertTrue(vendas.listarFila().stream().anyMatch(p->p.id()==id&&p.status()==StatusPedido.SAIU_ENTREGA&&"José".equals(p.nomeEntregador())));
-            assertEquals("José",vendas.listarDoCliente(usuario).get(0).getNomeEntregador());
+            assertThrows(IllegalArgumentException.class,()->vendas.transicionar(id,StatusPedido.SAIU_ENTREGA));
+            assertThrows(IllegalArgumentException.class,()->vendas.despachar(id,entregador.id()));
+            logistica.salvar(new Entregador(entregador.id(), parceiro, null, null, true));
+            assertEquals(parceiro, vendas.despachar(id,entregador.id()));
+            assertTrue(vendas.listarFila().stream().anyMatch(p->p.id()==id&&p.status()==StatusPedido.SAIU_ENTREGA&&parceiro.equals(p.nomeEntregador())));
+            assertEquals(parceiro,vendas.listarDoCliente(usuario).get(0).getNomeEntregador());
             vendas.transicionar(id,StatusPedido.ENTREGUE);
             assertEquals(StatusPedido.ENTREGUE,vendas.listarDoCliente(usuario).get(0).getStatus());
-            assertEquals("José",vendas.listarDoCliente(usuario).get(0).getNomeEntregador());
+            assertEquals(parceiro,vendas.listarDoCliente(usuario).get(0).getNomeEntregador());
             assertTrue(vendas.listarFila().stream().noneMatch(p->p.id()==id));
+            assertEquals(entregador.id(), vendas.listarDoCliente(usuario).get(0).getEntregadorId());
+            assertEquals(List.of(new RepasseEntregador(entregador.id(), parceiro, 1, cotacao.taxaEntrega())),
+                    logistica.repasses(VendaTeste.AGORA.minusMinutes(1), VendaTeste.AGORA.plusMinutes(1)).stream()
+                            .filter(r -> r.entregadorId() == entregador.id()).toList());
 
             for(TipoEntrega modalidade:List.of(TipoEntrega.RETIRADA,TipoEntrega.LOCAL)){
                 Pedido pedido=pedido(usuario,cliente,produto,modalidade);
                 pedido.setAgendadoPara(VendaTeste.AGORA.toLocalDate().atTime(20,0));
                 long outro=vendas.finalizar(pedido);
                 vendas.transicionar(outro,StatusPedido.PREPARANDO);vendas.transicionar(outro,StatusPedido.PRONTO);
-                assertThrows(IllegalStateException.class,()->vendas.transicionar(outro,StatusPedido.SAIU_ENTREGA,"José"));
+                assertThrows(IllegalStateException.class,()->vendas.despachar(outro,entregador.id()));
                 vendas.transicionar(outro,StatusPedido.ENTREGUE);
             }
             Pedido cancelar=pedido(usuario,cliente,produto,TipoEntrega.LOCAL);
@@ -95,6 +131,8 @@ class OperacaoV162IntegracaoTest {
             ConnectionFactory.executarEmTransacao(c->{
                 excluir(c,"DELETE i FROM pedido_itens i JOIN pedidos p ON p.id=i.pedido_id WHERE p.usuario_id=?",usuario.getId());
                 excluir(c,"DELETE FROM pedidos WHERE usuario_id=?",usuario.getId());
+                excluir(c,"DELETE FROM entregadores WHERE id=?",entregador.id());
+                excluir(c,"DELETE FROM bairros_entrega WHERE id=?",bairro.id());
                 for(long pdv:pdvIds){excluir(c,"DELETE FROM pedido_itens WHERE pedido_id=?",pdv);excluir(c,"DELETE FROM pedidos WHERE id=?",pdv);}
                 if(produto.getId()!=null){
                     excluir(c,"DELETE FROM movimentacoes_estoque WHERE produto_id=?",produto.getId());

@@ -6,6 +6,8 @@ Folhas de estilo que definem a apresentação visual das telas.
 
 Mantenha as responsabilidades desta camada separadas das demais e consulte os arquivos relacionados antes de alterações.
 
+O painel administrativo destaca atrasos por meio da pseudoclasse `:atrasado`.
+
 ## Explore as subpastas e arquivos
 
 | Caminho | Conteúdo e responsabilidade |

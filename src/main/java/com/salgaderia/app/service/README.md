@@ -26,6 +26,7 @@ Mantenha as responsabilidades desta camada separadas das demais e consulte os ar
 | [FotoAvaliacaoStorage.java](FotoAvaliacaoStorage.java) | Valida, redimensiona, salva e remove imagens locais de avaliações. |
 | [GamificacaoService.java](GamificacaoService.java) | Contrato de selos, pontos, cupons, giro regular e giro extra. |
 | [OperacaoLojaService.java](OperacaoLojaService.java) | Avalia a abertura e valida agendamentos pelo expediente local, inclusive após a meia-noite. |
+| [LogisticaService.java](LogisticaService.java) | Valida cadastros e calcula taxa e prazo por bairro. |
 | [PedidoCancelamentoService.java](PedidoCancelamentoService.java) | Devolve somente o saldo físico baixado e libera o cupom ao cancelar. |
 | [PedidoConcluidoObserver.java](PedidoConcluidoObserver.java) | Contrato Observer para finalização, confirmação PIX, entrega e cancelamento. |
 | [PedidoVendaService.java](PedidoVendaService.java) | Contrato para simular descontos, finalizar pedidos e alterar status de vendas. |
@@ -75,7 +76,7 @@ src/main/java/com/salgaderia/app/service/  # Define contratos e serviços de apl
 ├── pix/  # Porta, adapters e conciliação da cobrança PIX na vitrine.
 │   ├── LocalDemoPixGateway.java  # Gera um BR Code de demonstração sem pagamento ou confirmação externa.
 │   ├── MercadoPagoPixGateway.java  # Traduz cobranças para JSON e usa HttpClient para chamar a API Payments com idempotência.
-│   ├── PixConfiguracao.java  # Lê o token local do Mercado Pago e a taxa de entrega configurável.
+│   ├── PixConfiguracao.java  # Lê o token local do Mercado Pago.
 │   ├── PixGatewayService.java  # Porta de criação e consulta das cobranças PIX do checkout.
 │   ├── PixPagamentoService.java  # Concilia a resposta do gateway com a cobrança local, sem aprovar valores divergentes.
 │   └── README.md  # Guia da integração PIX da vitrine.
@@ -91,6 +92,7 @@ src/main/java/com/salgaderia/app/service/  # Define contratos e serviços de apl
 ├── FotoAvaliacaoStorage.java  # Valida, redimensiona, salva e remove imagens locais de avaliações.
 ├── GamificacaoService.java  # Contrato de selos, pontos, cupons, giro regular e giro extra.
 ├── OperacaoLojaService.java  # Avalia a abertura e valida agendamentos pelo expediente local, inclusive após a meia-noite.
+├── LogisticaService.java  # Valida cadastros e calcula taxa e prazo por bairro.
 ├── PedidoCancelamentoService.java  # Devolve somente o saldo físico baixado e libera o cupom ao cancelar.
 ├── PedidoConcluidoObserver.java  # Contrato Observer para finalização, confirmação PIX, entrega e cancelamento.
 ├── PedidoVendaService.java  # Contrato para simular descontos, finalizar pedidos e alterar status de vendas.

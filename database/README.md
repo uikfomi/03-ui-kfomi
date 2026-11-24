@@ -36,6 +36,7 @@ database/  # Reúne o schema, as migrações e os modelos de dados que apoiam a 
 │   ├── etapa15_operacao_loja.sql  # Adiciona expediente da loja, bloqueio de venda, baixa física e saída para entrega.
 │   ├── etapa16_cadastro_caixa_clube_vip.sql  # Migra o cadastro por e-mail, os filtros da caixa e o plano VIP único.
 │   ├── etapa17_personalizacao_entrega.sql  # Cria opcionais e registra categorias ativas, instruções do pedido e mínimo de entrega.
+│   ├── etapa18_logistica_entregadores_chuva.sql  # Adiciona bairros, entregadores, prazos e configuração de chuva/pico.
 │   ├── etapa4_migracao.sql  # Migração de contatos, usuários e custos históricos.
 │   ├── etapa8_pdv.sql  # Colunas de origem e pagamento do PDV.
 │   ├── etapa9_descontos.sql  # Cupons e registro de descontos por pedido.

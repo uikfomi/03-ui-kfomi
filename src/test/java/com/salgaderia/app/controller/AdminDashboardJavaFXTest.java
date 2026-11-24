@@ -70,13 +70,15 @@ class AdminDashboardJavaFXTest {
         fx(()->{FXMLLoader l=new FXMLLoader(getClass().getResource("/fxml/admin-dashboard.fxml"));l.setControllerFactory(c->painel(new Produtos(produto),vendas,new ComandasTeste()));Parent root=l.load();Stage stage=new Stage();stage.setScene(new Scene(root,1100,700));stage.show();((AdminDashboardController)l.getController()).definirUsuario(new UsuarioAdmin(2L,"Admin","admin","senha",true));loader.set(l);janela.set(stage);return null;});
         try{
             aguardar(()->fx(()->((Label)loader.get().getNamespace().get("badgePendentes")).getText().endsWith("0")));
-            vendas.fila.add(new PedidoFila(123,"Cliente",StatusPedido.PENDENTE,TipoEntrega.RETIRADA,null,LocalDateTime.now(),BigDecimal.TEN,"1 x Coxinha","85999999999",null,com.salgaderia.app.model.enums.StatusPagamento.NA_ENTREGA,
-                    false,false,null,List.of("1 × Coxinha\nAdicionais: Catupiry\nObservação: sem cebola")));
+            vendas.fila.add(new PedidoFila(123,"Cliente",StatusPedido.PENDENTE,TipoEntrega.RETIRADA,null,LocalDateTime.now().minusMinutes(26),BigDecimal.TEN,"1 x Coxinha","85999999999",null,com.salgaderia.app.model.enums.StatusPagamento.NA_ENTREGA,
+                    false,false,null,List.of("1 × Coxinha\nAdicionais: Catupiry\nObservação: sem cebola"),25,null));
             aguardar(()->fx(()->((Label)loader.get().getNamespace().get("badgePendentes")).getText().endsWith("1")));
             assertTrue(fx(()->((Label)loader.get().getNamespace().get("avisoPedido")).getText().contains("#123")));
             fx(()->{((Button)loader.get().getNamespace().get("menuFila")).fire();return null;});
             aguardar(()->fx(()->janela.get().getScene().getRoot().lookup(".preparo-instrucoes") instanceof Label instrucoes
                     && instrucoes.getText().contains("Catupiry") && instrucoes.getText().contains("sem cebola")));
+            assertTrue(fx(()->janela.get().getScene().getRoot().lookup(".pedido-atraso-titulo") instanceof Label alerta
+                    && alerta.isVisible() && alerta.getText().equals("⚠️ ATRASADO")));
         }finally{fx(()->{janela.get().close();return null;});}
     }
     @Test void mostraMesasEPermiteAbrirComanda() throws Exception {
@@ -125,7 +127,7 @@ class AdminDashboardJavaFXTest {
         final List<PedidoFila> fila=new java.util.concurrent.CopyOnWriteArrayList<>();
         final AtomicReference<Pedido> enviado=new AtomicReference<>();final AtomicReference<FormaPagamento> forma=new AtomicReference<>();final AtomicReference<BigDecimal> recebido=new AtomicReference<>();final AtomicReference<String> codigo=new AtomicReference<>();
         public List<PedidoFila> listarFila(){return List.copyOf(fila);}public long finalizarPdv(Pedido p,FormaPagamento f,BigDecimal r){enviado.set(p);forma.set(f);recebido.set(r);return 1;}
-        public List<Pedido> listarDoCliente(UsuarioCliente u){return List.of();}public long finalizar(Pedido p){return 1;}public void transicionar(long id,StatusPedido status,String entregador){}
+        public List<Pedido> listarDoCliente(UsuarioCliente u){return List.of();}public long finalizar(Pedido p){return 1;}public void transicionar(long id,StatusPedido status){} public String despachar(long id, long parceiro){throw new UnsupportedOperationException();}
         public com.salgaderia.app.service.desconto.ResultadoDesconto simular(Pedido p,String c){var cupom="UIKFOMI10".equals(c)?new com.salgaderia.app.service.desconto.Cupom(c,BigDecimal.TEN,BigDecimal.ZERO):null;return new com.salgaderia.app.service.desconto.CalculadoraDescontos().calcular(new com.salgaderia.app.service.desconto.ContextoDesconto(p.getItens(),0,cupom));}
         public long finalizar(Pedido p,String c,com.salgaderia.app.service.desconto.ResultadoDesconto d){return finalizar(p);}
         public long finalizarPdv(Pedido p,FormaPagamento f,BigDecimal r,String c,com.salgaderia.app.service.desconto.ResultadoDesconto d){codigo.set(c);return finalizarPdv(p,f,r);}
@@ -150,6 +152,7 @@ class AdminDashboardJavaFXTest {
     }
     private static class Financeiro implements RelatorioFinanceiroService {
         public Relatorio calcular(LocalDateTime i,LocalDateTime f){return new Relatorio(BigDecimal.TEN,BigDecimal.TEN,BigDecimal.ONE,BigDecimal.ZERO,new BigDecimal("9"));}
+        public List<RepasseEntregador> repasses(LocalDateTime i, LocalDateTime f){return List.of();}
         public void exportarCsv(Relatorio r,java.nio.file.Path destino){}
         public Map<String,BigDecimal> produtosMaisVendidos(LocalDateTime i,LocalDateTime f){return Map.of("Coxinha",BigDecimal.ONE);}public Map<String,BigDecimal> receitaPorCategoria(LocalDateTime i,LocalDateTime f){return Map.of("Sem categoria",BigDecimal.TEN);}
     }

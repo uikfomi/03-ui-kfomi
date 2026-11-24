@@ -42,6 +42,10 @@ public final class OperacaoLojaService {
                 .setScale(2, RoundingMode.HALF_UP);
         return config.pedidoMinimoEntrega().subtract(subtotal).max(BigDecimal.ZERO);
     }
+    public ConfiguracaoLoja consultar(Connection c) throws SQLException { return dao.buscar(c, false); }
+    public void definirModoChuva(boolean ativo) {
+        ConnectionFactory.executarEmTransacao(c -> { dao.definirModoChuva(c, ativo); return null; });
+    }
     public void definirAberturaManual(boolean aberta) {
         ConnectionFactory.executarEmTransacao(c -> { dao.definirAberturaManual(c, aberta); return null; });
     }

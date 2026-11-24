@@ -13,7 +13,8 @@ public final class ConfiguracaoLojaDAOImpl implements ConfiguracaoLojaDAO {
             if (!rs.next()) throw new SQLException("Configuração operacional da loja não encontrada.");
             return new ConfiguracaoLoja(rs.getBoolean("aberta_manualmente"),
                     rs.getObject("horario_abertura", LocalTime.class), rs.getObject("horario_fechamento", LocalTime.class),
-                    rs.getBoolean("respeitar_horario_automatico"), rs.getBigDecimal("pedido_minimo_entrega"));
+                    rs.getBoolean("respeitar_horario_automatico"), rs.getBigDecimal("pedido_minimo_entrega"), rs.getBoolean("modo_chuva_ativo"),
+                    rs.getInt("acrescimo_tempo_chuva_min"), rs.getBigDecimal("acrescimo_taxa_chuva"));
         }
     }
     @Override public void salvarExpediente(Connection c, ConfiguracaoLoja config) throws SQLException {
@@ -27,6 +28,12 @@ public final class ConfiguracaoLojaDAOImpl implements ConfiguracaoLojaDAO {
         try (var ps = c.prepareStatement("UPDATE configuracao_loja SET pedido_minimo_entrega=? WHERE id=1")) {
             ps.setBigDecimal(1, valor);
             if (ps.executeUpdate() != 1) throw new SQLException("Pedido mínimo não atualizado.");
+        }
+    }
+    @Override public void definirModoChuva(Connection c, boolean ativo) throws SQLException {
+        try (var ps = c.prepareStatement("UPDATE configuracao_loja SET modo_chuva_ativo=? WHERE id=1")) {
+            ps.setBoolean(1, ativo);
+            if (ps.executeUpdate() != 1) throw new SQLException("Modo Chuva/Pico não atualizado.");
         }
     }
     @Override public void definirAberturaManual(Connection c, boolean aberta) throws SQLException {
