@@ -3,6 +3,8 @@
 <?import javafx.scene.layout.*?>
 <BorderPane fx:id="raiz" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.salgaderia.app.controller.AdminDashboardController" stylesheets="@../css/admin.css" styleClass="admin-root">
     <left>
+        <ScrollPane fitToWidth="true" fitToHeight="true" hbarPolicy="NEVER" prefWidth="235" styleClass="admin-scroll">
+        <content>
         <VBox spacing="10" prefWidth="220" styleClass="admin-sidebar">
             <Label text="SALGADERIA PRO" styleClass="admin-brand" />
             <Label text="Painel administrativo" styleClass="admin-sidebar-caption" />
@@ -15,12 +17,16 @@
             <Button text="Entregadores Parceiros" maxWidth="Infinity" onAction="#entregadoresParceiros" styleClass="admin-menu" />
             <Button fx:id="menuEstoque" text="Produtos e estoque" maxWidth="Infinity" onAction="#estoque" styleClass="admin-menu" />
             <Button fx:id="menuFinanceiro" text="Financeiro e lucro" maxWidth="Infinity" onAction="#financeiro" styleClass="admin-menu" />
+            <Button fx:id="menuCaixa" text="Fechamento de Caixa" maxWidth="Infinity" onAction="#fechamentoCaixa" styleClass="admin-menu" />
+            <Button fx:id="menuRadar" text="Radar de Clientes" maxWidth="Infinity" onAction="#radarClientes" styleClass="admin-menu" />
             <Button fx:id="menuModeracao" text="Moderação" maxWidth="Infinity" onAction="#moderacao" styleClass="admin-menu" />
             <Button fx:id="menuClube" text="Clube VIP" maxWidth="Infinity" onAction="#clubeDaFome" styleClass="admin-menu" />
             <Region VBox.vgrow="ALWAYS" />
             <Label fx:id="usuarioNome" styleClass="admin-sidebar-caption" />
             <Button fx:id="menuVoltar" text="Voltar aos módulos" maxWidth="Infinity" onAction="#voltar" styleClass="admin-menu" />
         </VBox>
+        </content>
+        </ScrollPane>
     </left>
     <center>
         <VBox spacing="18" styleClass="admin-main">

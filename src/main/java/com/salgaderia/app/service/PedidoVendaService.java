@@ -12,6 +12,7 @@ public interface PedidoVendaService {
                       String codigo, com.salgaderia.app.service.desconto.ResultadoDesconto esperado);
     void transicionar(long pedidoId, com.salgaderia.app.model.enums.StatusPedido destino);
     String despachar(long pedidoId, long entregadorId);
+    void confirmarCartaoApp(long pedidoId, com.salgaderia.app.model.UsuarioAdmin admin);
     void cancelarDoCliente(com.salgaderia.app.model.UsuarioCliente cliente, long pedidoId);
     long contarFilaCozinha();
     java.util.List<com.salgaderia.app.model.PedidoItem> repetirUltimoPedido(com.salgaderia.app.model.UsuarioCliente usuario);

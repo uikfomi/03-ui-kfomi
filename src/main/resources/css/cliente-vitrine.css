@@ -36,3 +36,11 @@
     -fx-padding: 8 12 8 12;
     -fx-font-weight: bold;
 }
+
+.etiqueta-destaque {
+    -fx-background-color: #f9e7ba;
+    -fx-background-radius: 8;
+    -fx-padding: 4 8;
+    -fx-text-fill: #6c3d0c;
+    -fx-font-weight: bold;
+}

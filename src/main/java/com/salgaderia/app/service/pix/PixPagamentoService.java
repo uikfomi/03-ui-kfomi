@@ -30,7 +30,7 @@ public final class PixPagamentoService {
 
     private final PixPagamentoDAO dados=new PixPagamentoDAOImpl();
     private final UsuarioDAO usuarios=new UsuarioDAOImpl(new ContatoDAOImpl());
-    private final BarramentoPedido eventos=new BarramentoPedido(new ConquistasObserver(new GamificacaoDAOImpl()));
+    private final BarramentoPedido eventos=new BarramentoPedido(new ConquistasObserver(new GamificacaoDAOImpl()), new com.salgaderia.app.service.FidelidadeService());
     private final PedidoCancelamentoService cancelamento=new PedidoCancelamentoService(
             new PedidoDAOImpl(),new ProdutoDAOImpl(),new MovimentacaoEstoqueDAOImpl(),eventos);
     private final PixGatewayService demo=new LocalDemoPixGateway();

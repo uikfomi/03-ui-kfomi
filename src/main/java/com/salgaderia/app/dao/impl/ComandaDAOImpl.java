@@ -53,7 +53,7 @@ public final class ComandaDAOImpl implements ComandaDAO {
     }
     @Override public long concluirVenda(Connection c,long atendimento,long usuarioId)throws SQLException{
         long pedido;
-        try(PreparedStatement ps=c.prepareStatement("INSERT INTO pedidos(usuario_id,status,tipo_entrega,criado_em,origem,status_pagamento) VALUES (?,'ENTREGUE','LOCAL',NOW(),'COMANDA','PAGO')",Statement.RETURN_GENERATED_KEYS)){
+        try(PreparedStatement ps=c.prepareStatement("INSERT INTO pedidos(usuario_id,status,tipo_entrega,criado_em,origem,status_pagamento,pago_em) VALUES (?,'ENTREGUE','LOCAL',NOW(),'COMANDA','PAGO',NOW())",Statement.RETURN_GENERATED_KEYS)){
             ps.setLong(1,usuarioId);ps.executeUpdate();try(ResultSet rs=ps.getGeneratedKeys()){if(!rs.next())throw new SQLException("ID de venda não retornado");pedido=rs.getLong(1);}
         }
         try(PreparedStatement ps=c.prepareStatement("INSERT INTO pedido_itens(pedido_id,produto_id,quantidade,preco_unitario,custo_unitario) SELECT ?,produto_id,quantidade,preco_unitario,custo_unitario FROM comanda_itens WHERE atendimento_id=?")){

@@ -25,6 +25,9 @@ public enum FormaPagamento {
             return false;
         }
     },
+    CARTAO_APP {
+        @Override public boolean isPermiteTroco() { return false; }
+    },
     CARTAO_DEBITO {
         @Override
         public boolean isPermiteTroco() {
@@ -39,6 +42,7 @@ public enum FormaPagamento {
             case PIX -> "PIX";
             case DINHEIRO -> "Dinheiro";
             case CARTAO -> "Cartão";
+            case CARTAO_APP -> "Cartão App";
             case CARTAO_CREDITO -> "Cartão de crédito";
             case CARTAO_DEBITO -> "Cartão de débito";
         };

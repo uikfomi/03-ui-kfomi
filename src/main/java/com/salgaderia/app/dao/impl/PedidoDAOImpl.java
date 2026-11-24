@@ -21,7 +21,7 @@ public class PedidoDAOImpl implements PedidoDAO {
     @Override public java.util.List<Pedido> listarDoCliente(Connection c,UsuarioCliente usuario) throws SQLException {
         String sql="SELECT p.id pedido_id,p.status,p.tipo_entrega,p.endereco_entrega,p.criado_em,p.agendado_para,p.desconto,p.forma_pagamento,p.roleta_liberada,"
                 + "p.status_pagamento,p.pix_provedor,p.taxa_entrega,p.brinde_descricao,p.nome_entregador,p.bairro_id,p.entregador_id,p.tempo_estimado_min,"
-                + "i.id item_id,i.quantidade,i.preco_unitario,i.observacao_personalizada,i.grupo_personalizado,i.tipo_personalizacao,i.restricoes_personalizadas,i.filtros_caixa,i.adicionais_resumo,i.opcionais_ids,pr.id produto_id,pr.nome produto_nome,pr.descricao produto_descricao,"
+                + "i.id item_id,i.quantidade,i.preco_unitario,i.observacao_personalizada,i.grupo_personalizado,i.tipo_personalizacao,i.restricoes_personalizadas,i.filtros_caixa,i.adicionais_resumo,i.opcionais_ids,i.pontos_resgate,i.valor_resgate,pr.id produto_id,pr.nome produto_nome,pr.descricao produto_descricao,"
                 + "pr.preco_venda,pr.custo_producao,pr.estoque_atual,pr.estoque_minimo,pr.url_imagem,pr.disponivel_venda,"
                 + "cat.id categoria_id,cat.nome categoria_nome,cat.descricao categoria_descricao "
                 + "FROM pedidos p JOIN pedido_itens i ON i.pedido_id=p.id JOIN produtos pr ON pr.id=i.produto_id "
@@ -43,7 +43,8 @@ public class PedidoDAOImpl implements PedidoDAO {
                     Produto produto=new Produto(rs.getLong("produto_id"),categoria,rs.getString("produto_nome"),rs.getString("produto_descricao"),rs.getBigDecimal("preco_venda"),rs.getBigDecimal("custo_producao"),rs.getBigDecimal("estoque_atual"),rs.getBigDecimal("estoque_minimo"),rs.getString("url_imagem"));
                     produto.setDisponivelVenda(rs.getBoolean("disponivel_venda"));
                     dados.itens().add(new PedidoItem(rs.getLong("item_id"),produto,rs.getBigDecimal("quantidade"),rs.getBigDecimal("preco_unitario"),
-                            rs.getString("observacao_personalizada"),personalizacao(rs),opcionaisIds(rs),rs.getString("adicionais_resumo")));
+                            rs.getString("observacao_personalizada"),personalizacao(rs),opcionaisIds(rs),rs.getString("adicionais_resumo"),
+                            rs.getObject("pontos_resgate",Integer.class),rs.getBigDecimal("valor_resgate")));
                 }
             }
         }
@@ -71,15 +72,15 @@ public class PedidoDAOImpl implements PedidoDAO {
                 new PersonalizacaoItem(UUID.fromString(grupo),tipo,restricoes,filtros.categorias(),filtros.produtos());
     }
     @Override public java.util.List<PedidoFila> listarFila(Connection c) throws SQLException {
-        String sql="SELECT p.id,p.status,p.tipo_entrega,p.endereco_entrega,p.criado_em,p.agendado_para,p.desconto,p.status_pagamento,p.pix_provedor,p.taxa_entrega,p.brinde_descricao,p.nome_entregador,p.bairro_id,p.entregador_id,p.tempo_estimado_min,b.nome bairro,COALESCE(ct.nome,u.nome,'Cliente') cliente,COALESCE(NULLIF(TRIM(ct.whatsapp),''),NULLIF(TRIM(ct.telefone),'')) telefone,"
-                + "i.quantidade,i.preco_unitario,i.observacao_personalizada,i.grupo_personalizado,i.adicionais_resumo,pr.nome produto FROM pedidos p JOIN usuarios u ON u.id=p.usuario_id "
+        String sql="SELECT p.id,p.status,p.tipo_entrega,p.endereco_entrega,p.criado_em,p.agendado_para,p.desconto,p.status_pagamento,p.pix_provedor,p.taxa_entrega,p.brinde_descricao,p.nome_entregador,p.bairro_id,p.entregador_id,p.tempo_estimado_min,p.forma_pagamento,b.nome bairro,COALESCE(ct.nome,u.nome,'Cliente') cliente,COALESCE(NULLIF(TRIM(ct.whatsapp),''),NULLIF(TRIM(ct.telefone),'')) telefone,"
+                + "i.quantidade,i.preco_unitario,i.observacao_personalizada,i.grupo_personalizado,i.adicionais_resumo,i.pontos_resgate,pr.nome produto FROM pedidos p JOIN usuarios u ON u.id=p.usuario_id "
                 + "LEFT JOIN bairros_entrega b ON b.id=p.bairro_id LEFT JOIN contatos ct ON ct.id=p.contato_id LEFT JOIN pedido_itens i ON i.pedido_id=p.id "
                 + "LEFT JOIN produtos pr ON pr.id=i.produto_id WHERE p.origem='VITRINE' AND u.perfil='CLIENTE' "
                 + "AND p.status IN ('PENDENTE','PREPARANDO','PRONTO','SAIU_ENTREGA') AND p.status_pagamento<>'AGUARDANDO_PIX' ORDER BY p.criado_em,p.id,i.id";
         class Grupo {
             long id;String cliente,endereco,telefone;com.salgaderia.app.model.enums.StatusPedido status;com.salgaderia.app.model.enums.TipoEntrega entrega;
             LocalDateTime data,agendado;BigDecimal total=BigDecimal.ZERO, desconto;
-            StatusPagamento pagamento;String provedor,brinde,entregador,bairro;Integer prazo;
+            StatusPagamento pagamento;String provedor,brinde,entregador,bairro;Integer prazo;boolean cartaoApp;
             final java.util.List<StringJoiner> itens=new java.util.ArrayList<>();
             final Map<String,StringJoiner> personalizados=new java.util.HashMap<>();
 
@@ -107,10 +108,11 @@ public class PedidoDAOImpl implements PedidoDAO {
                 if(g==null){g=new Grupo();g.id=id;g.cliente=rs.getString("cliente");g.telefone=rs.getString("telefone");g.endereco=rs.getString("endereco_entrega");
                     g.status=com.salgaderia.app.model.enums.StatusPedido.valueOf(rs.getString("status"));g.entrega=com.salgaderia.app.model.enums.TipoEntrega.valueOf(rs.getString("tipo_entrega"));g.data=rs.getTimestamp("criado_em").toLocalDateTime();Timestamp agendado=rs.getTimestamp("agendado_para");g.agendado=agendado==null?null:agendado.toLocalDateTime();g.desconto=rs.getBigDecimal("desconto");
                     g.total=rs.getBigDecimal("taxa_entrega");g.pagamento=StatusPagamento.valueOf(rs.getString("status_pagamento"));
-                    g.bairro=rs.getString("bairro");g.prazo=rs.getObject("tempo_estimado_min",Integer.class);g.entregador=rs.getString("nome_entregador");g.provedor=rs.getString("pix_provedor");g.brinde=rs.getString("brinde_descricao");grupos.put(id,g);}
+                    g.cartaoApp="CARTAO_APP".equals(rs.getString("forma_pagamento"));g.bairro=rs.getString("bairro");g.prazo=rs.getObject("tempo_estimado_min",Integer.class);g.entregador=rs.getString("nome_entregador");g.provedor=rs.getString("pix_provedor");g.brinde=rs.getString("brinde_descricao");grupos.put(id,g);}
                 BigDecimal quantidade=rs.getBigDecimal("quantidade");if(quantidade!=null){
+                    Integer pontos=rs.getObject("pontos_resgate",Integer.class);
                     g.adicionar(rs.getString("grupo_personalizado"),rs.getString("observacao_personalizada"),rs.getString("adicionais_resumo"),
-                            quantidade.stripTrailingZeros().toPlainString()+" × "+rs.getString("produto"));
+                            quantidade.stripTrailingZeros().toPlainString()+" × "+rs.getString("produto")+(pontos==null?"":" · Resgate de "+pontos+" pontos"));
                     g.total=g.total.add(quantidade.multiply(rs.getBigDecimal("preco_unitario")));
                 }
             }
@@ -118,11 +120,11 @@ public class PedidoDAOImpl implements PedidoDAO {
         java.util.List<PedidoFila> resultado=new java.util.ArrayList<>();
         for(Grupo g:grupos.values())resultado.add(new PedidoFila(g.id,g.cliente,g.status,g.entrega,g.endereco,g.data,g.total.subtract(g.desconto),
                 g.itens.stream().map(StringJoiner::toString).collect(Collectors.joining("\n"))+(g.brinde==null?"":"\nBrinde: "+g.brinde),
-                g.telefone,g.agendado,g.pagamento,"DEMO".equals(g.provedor),"MERCADO_PAGO".equals(g.provedor),g.entregador,g.preparo,g.prazo,g.bairro));
+                g.telefone,g.agendado,g.pagamento,"DEMO".equals(g.provedor),"MERCADO_PAGO".equals(g.provedor),g.entregador,g.preparo,g.prazo,g.bairro,g.cartaoApp));
         return resultado;
     }
     @Override public void registrarPdv(Connection c,long id,com.salgaderia.app.model.enums.FormaPagamento forma,BigDecimal recebido,BigDecimal troco) throws SQLException {
-        try(PreparedStatement ps=c.prepareStatement("UPDATE pedidos SET origem='PDV',status='ENTREGUE',status_pagamento='PAGO',forma_pagamento=?,valor_recebido=?,troco=? WHERE id=? AND status='PENDENTE'")){
+        try(PreparedStatement ps=c.prepareStatement("UPDATE pedidos SET origem='PDV',status='ENTREGUE',status_pagamento='PAGO',pago_em=NOW(),forma_pagamento=?,valor_recebido=?,troco=? WHERE id=? AND status='PENDENTE'")){
             ps.setString(1,forma.name());ps.setBigDecimal(2,recebido);ps.setBigDecimal(3,troco);ps.setLong(4,id);if(ps.executeUpdate()!=1)throw new SQLException("Venda PDV não atualizada");
         }
     }
@@ -147,7 +149,7 @@ public class PedidoDAOImpl implements PedidoDAO {
             try(ResultSet rs=ps.getGeneratedKeys()){if(!rs.next())throw new SQLException("ID de pedido não retornado");id=rs.getLong(1);}
         }
         Map<Long,BigDecimal> restante=new HashMap<>(baixas);
-        try(PreparedStatement ps=c.prepareStatement("INSERT INTO pedido_itens(pedido_id,produto_id,quantidade,preco_unitario,custo_unitario,observacao_personalizada,grupo_personalizado,tipo_personalizacao,restricoes_personalizadas,quantidade_baixada,filtros_caixa,adicionais_resumo,opcionais_ids) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")){
+        try(PreparedStatement ps=c.prepareStatement("INSERT INTO pedido_itens(pedido_id,produto_id,quantidade,preco_unitario,custo_unitario,observacao_personalizada,grupo_personalizado,tipo_personalizacao,restricoes_personalizadas,quantidade_baixada,filtros_caixa,adicionais_resumo,opcionais_ids,pontos_resgate,valor_resgate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")){
             for(PedidoItem item:pedido.getItens()){
                 long produtoId=item.getProduto().getId();BigDecimal custo=custos.get(produtoId);if(custo==null)throw new SQLException("Custo do produto não informado");
                 ps.setLong(1,id);ps.setLong(2,produtoId);ps.setBigDecimal(3,item.getQuantidade());ps.setBigDecimal(4,item.getPrecoUnitario());ps.setBigDecimal(5,custo);
@@ -164,6 +166,7 @@ public class PedidoDAOImpl implements PedidoDAO {
                         JSON.toJson(new FiltrosCaixa(personalizacao.categoriasExcluidas(),personalizacao.produtosExcluidos())));
                 ps.setString(12, item.getAdicionaisResumo());
                 ps.setString(13, item.getOpcionaisIds().isEmpty() ? null : JSON.toJson(item.getOpcionaisIds()));
+                ps.setObject(14,item.getPontosResgate(),Types.INTEGER);ps.setBigDecimal(15,item.getValorResgate());
                 ps.addBatch();
             } ps.executeBatch();
         } return id;
@@ -199,6 +202,28 @@ public class PedidoDAOImpl implements PedidoDAO {
             }
         }
     }
+    @Override public void prepararCartaoApp(Connection c,long id) throws SQLException {
+        atualizarPagamento(c,id,"status_pagamento='AGUARDANDO_CARTAO'"," AND origem='VITRINE' AND forma_pagamento='CARTAO_APP' AND status='PENDENTE'");
+    }
+    @Override public void confirmarCartaoApp(Connection c,long id) throws SQLException {
+        atualizarPagamento(c,id,"status_pagamento='PAGO',pago_em=NOW()",
+                " AND origem='VITRINE' AND forma_pagamento='CARTAO_APP' AND status='PENDENTE' AND status_pagamento='AGUARDANDO_CARTAO'");
+    }
+    @Override public void registrarSemCobranca(Connection c,long id) throws SQLException {
+        atualizarPagamento(c,id,"status_pagamento='PAGO',pago_em=NOW(),forma_pagamento=NULL"," AND status='PENDENTE'");
+    }
+    private void atualizarPagamento(Connection c,long id,String valores,String filtro) throws SQLException {
+        try (var ps=c.prepareStatement("UPDATE pedidos SET "+valores+" WHERE id=?"+filtro)) {
+            ps.setLong(1,id);
+            if(ps.executeUpdate()!=1) throw new IllegalArgumentException("Pagamento não está disponível para esta operação.");
+        }
+    }
+    @Override public boolean cartaoAppPago(Connection c,long id) throws SQLException {
+        try(var ps=c.prepareStatement("SELECT 1 FROM pedidos WHERE id=? AND forma_pagamento='CARTAO_APP' AND status_pagamento='PAGO' AND status<>'CANCELADO'")) {
+            ps.setLong(1,id);
+            try(var rs=ps.executeQuery()){return rs.next();}
+        }
+    }
     @Override public Map<Long,BigDecimal> quantidadesBaixadas(Connection c,long id) throws SQLException {
         try(PreparedStatement ps=c.prepareStatement("SELECT produto_id,SUM(COALESCE(quantidade_baixada,quantidade)) AS baixa FROM pedido_itens WHERE pedido_id=? GROUP BY produto_id HAVING baixa>0 ORDER BY produto_id")) {
             ps.setLong(1,id);try(ResultSet rs=ps.executeQuery()){Map<Long,BigDecimal> resultado=new java.util.LinkedHashMap<>();while(rs.next())resultado.put(rs.getLong(1),rs.getBigDecimal(2));return resultado;}
@@ -206,8 +231,8 @@ public class PedidoDAOImpl implements PedidoDAO {
     }
     @Override public void atualizarStatus(Connection c,long id,com.salgaderia.app.model.enums.StatusPedido status) throws SQLException {
         String anonimizar=status==com.salgaderia.app.model.enums.StatusPedido.CANCELADO?",pix_payload=NULL,pix_pagador_email=NULL,pix_pagador_documento=NULL":"";
-        try(PreparedStatement ps=c.prepareStatement("UPDATE pedidos SET status=?,status_pagamento=IF(?='ENTREGUE' AND status_pagamento='NA_ENTREGA','PAGO',status_pagamento)"+anonimizar+" WHERE id=?")){
-            ps.setString(1,status.name());ps.setString(2,status.name());ps.setLong(3,id);if(ps.executeUpdate()!=1)throw new SQLException("Pedido não atualizado");}
+        try(PreparedStatement ps=c.prepareStatement("UPDATE pedidos SET status=?,pago_em=IF(?='ENTREGUE' AND status_pagamento='NA_ENTREGA',NOW(),pago_em),status_pagamento=IF(?='ENTREGUE' AND status_pagamento='NA_ENTREGA','PAGO',status_pagamento)"+anonimizar+" WHERE id=?")){
+            ps.setString(1,status.name());ps.setString(2,status.name());ps.setString(3,status.name());ps.setLong(4,id);if(ps.executeUpdate()!=1)throw new SQLException("Pedido não atualizado");}
     }
     @Override public boolean possuiPedidoEntregue(Connection c,long usuarioId,long produtoId) throws SQLException {
         try(PreparedStatement ps=c.prepareStatement("SELECT 1 FROM pedidos p JOIN pedido_itens i ON i.pedido_id=p.id WHERE p.usuario_id=? AND p.status='ENTREGUE' AND i.produto_id=? LIMIT 1")){
@@ -225,13 +250,13 @@ public class PedidoDAOImpl implements PedidoDAO {
         }
     }
     @Override public void registrarDesconto(Connection c,long id,com.salgaderia.app.service.desconto.ResultadoDesconto desconto) throws SQLException {
-        try (PreparedStatement ps=c.prepareStatement("UPDATE pedidos SET desconto=?,estrategia_desconto=?,cupom_codigo=?,taxa_entrega=?,brinde_descricao=? WHERE id=?")) {
+        try (PreparedStatement ps=c.prepareStatement("UPDATE pedidos SET desconto=?,estrategia_desconto=?,cupom_codigo=?,taxa_entrega=?,brinde_descricao=?,frete_isento_vip=? WHERE id=?")) {
             ps.setBigDecimal(1,desconto.desconto());ps.setString(2,desconto.estrategia());ps.setString(3,desconto.cupom());
-            ps.setBigDecimal(4,desconto.taxaEntrega());ps.setString(5,desconto.brinde());ps.setLong(6,id);
+            ps.setBigDecimal(4,desconto.taxaEntrega());ps.setString(5,desconto.brinde());ps.setBigDecimal(6,desconto.freteIsentoVip());ps.setLong(7,id);
             if(ps.executeUpdate()!=1)throw new SQLException("Desconto não registrado");
         }
     }
     @Override public long contarFilaCozinha(Connection c) throws SQLException {
-        try(PreparedStatement ps=c.prepareStatement("SELECT COUNT(*) FROM pedidos WHERE status IN ('PENDENTE','PREPARANDO') AND status_pagamento<>'AGUARDANDO_PIX' AND (agendado_para IS NULL OR agendado_para<=NOW())");ResultSet rs=ps.executeQuery()){rs.next();return rs.getLong(1);}
+        try(PreparedStatement ps=c.prepareStatement("SELECT COUNT(*) FROM pedidos WHERE status IN ('PENDENTE','PREPARANDO') AND status_pagamento NOT IN ('AGUARDANDO_PIX','AGUARDANDO_CARTAO') AND (agendado_para IS NULL OR agendado_para<=NOW())");ResultSet rs=ps.executeQuery()){rs.next();return rs.getLong(1);}
     }
 }

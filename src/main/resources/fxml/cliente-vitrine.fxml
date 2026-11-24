@@ -20,6 +20,7 @@
             <HBox spacing="10" alignment="CENTER_LEFT">
                 <TextField fx:id="busca" promptText="Busque pelo nome ou sabor" accessibleText="Buscar por nome ou sabor" HBox.hgrow="ALWAYS" />
                 <ComboBox fx:id="categorias" prefWidth="220" promptText="Todas as categorias" accessibleText="Filtro de categoria" />
+                <CheckBox fx:id="meusFavoritos" text="Meus Favoritos" />
                 <Button fx:id="botaoPerfil" text="Meu perfil" onAction="#meuPerfil" styleClass="button-outline" />
                 <Button text="Atualizar" onAction="#carregarProdutos" styleClass="button-outline" />
             </HBox>
@@ -55,6 +56,7 @@
                 <ScrollPane fitToWidth="true" hbarPolicy="NEVER" VBox.vgrow="ALWAYS" styleClass="rolagem-transparente">
                     <content>
                         <VBox spacing="12">
+                            <Label fx:id="resumoMensal" wrapText="true" text="Consultando seu resumo mensal…" styleClass="estado-vitrine" />
                             <Label fx:id="mensagemPedidos" wrapText="true" styleClass="estado-vitrine" />
                             <VBox fx:id="listaPedidos" spacing="12" />
                         </VBox>
@@ -82,6 +84,8 @@
             <ScrollPane fitToWidth="true" hbarPolicy="NEVER" prefViewportHeight="140" styleClass="rolagem-transparente">
                 <content><VBox fx:id="itensCarrinho" spacing="8" /></content>
             </ScrollPane>
+            <Label fx:id="saldoResgate" wrapText="true" text="Consultando pontos para resgate…" styleClass="subtitle" />
+            <VBox fx:id="sugestaoCarrinho" spacing="5" visible="false" managed="false" />
             <Separator />
             <Label text="Como deseja receber?" styleClass="field-label" />
             <RadioButton fx:id="retirada" text="Retirada no Balcão" />
@@ -98,6 +102,7 @@
             <Separator />
             <Label text="Forma de pagamento" styleClass="field-label" />
             <ComboBox fx:id="formaPagamento" promptText="Selecione a forma de pagamento" maxWidth="Infinity" />
+            <Label fx:id="orientacaoCartao" wrapText="true" visible="false" managed="false" styleClass="subtitle" />
             <VBox fx:id="dadosPagadorPix" spacing="5" visible="false" managed="false">
                 <Label text="Dados para a cobrança Mercado Pago" wrapText="true" styleClass="field-label" />
                 <TextField fx:id="emailPix" promptText="E-mail do pagador" />

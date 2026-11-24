@@ -1,6 +1,6 @@
 # Ui K'Fomi — Salgaderia Pro
 
-![Versão](https://img.shields.io/badge/vers%C3%A3o-v1.8.0-8b4513)
+![Versão](https://img.shields.io/badge/vers%C3%A3o-v1.9.0-8b4513)
 ![Java](https://img.shields.io/badge/Java-17%2B-orange)
 ![JavaFX](https://img.shields.io/badge/JavaFX-21-blue)
 ![MySQL](https://img.shields.io/badge/MySQL-8-4479A1)

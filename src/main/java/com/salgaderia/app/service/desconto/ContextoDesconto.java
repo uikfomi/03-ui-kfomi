@@ -20,7 +20,7 @@ public record ContextoDesconto(List<PedidoItem> itens, long pedidosEntregues, Cu
     }
     public List<PedidoItem> itensElegiveis(){return itensElegiveis(itens);}
     public static List<PedidoItem> itensElegiveis(List<PedidoItem> itens){
-        return itens.stream().filter(i->i.getPersonalizacao()==null||i.getPersonalizacao().tipo().orcamento()==null).toList();
+        return itens.stream().filter(i->!i.isResgate() && (i.getPersonalizacao()==null||i.getPersonalizacao().tipo().orcamento()==null)).toList();
     }
     public BigDecimal subtotal() {
         return itens.stream().map(PedidoItem::calcularSubtotal).reduce(BigDecimal.ZERO, BigDecimal::add);

@@ -56,6 +56,7 @@ public final class ComandaServiceImpl implements ComandaService {
     private boolean pagar(long mesaId,long atendimentoId,String pessoa,FormaPagamento forma,BigDecimal valor,Long itemId,BigDecimal quantidade,Usuario usuario){
         if(pessoa==null||pessoa.isBlank()||pessoa.trim().length()>100)throw new IllegalArgumentException("Informe o nome da pessoa");
         Objects.requireNonNull(forma,"forma de pagamento");
+        if (forma==FormaPagamento.CARTAO_APP) throw new IllegalArgumentException("Cartão App é exclusivo da vitrine.");
         return ConnectionFactory.executarEmTransacao(c->{Mesa mesa=comandas.bloquearMesa(c,mesaId);validarAdmin(c,usuario);Comanda comanda=atendimentoEsperado(c,mesa,atendimentoId);
             BigDecimal valorPagamento=valor;
             if(itemId!=null){

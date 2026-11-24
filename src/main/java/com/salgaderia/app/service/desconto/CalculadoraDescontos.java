@@ -41,6 +41,6 @@ public final class CalculadoraDescontos {
         }
         if(nome.equals("NENHUM")&&ajusteCaixas.signum()>0)nome="CAIXA_MISTERIOSA";
         BigDecimal desconto=melhor.add(ajusteCaixas);
-        return new ResultadoDesconto(subtotal,desconto,subtotal.add(taxa).subtract(desconto),nome,codigo,taxa,brinde,freteVip);
+        return new ResultadoDesconto(subtotal,desconto,subtotal.add(taxa).subtract(desconto),nome,codigo,taxa,brinde,freteVip,null,freteVip?contexto.taxaEntrega():BigDecimal.ZERO);
     }
 }

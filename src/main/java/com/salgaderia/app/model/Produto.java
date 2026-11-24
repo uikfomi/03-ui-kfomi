@@ -14,6 +14,8 @@ public class Produto {
     private BigDecimal estoqueAtual;
     private BigDecimal estoqueMinimo;
     private String urlImagem;
+    private String etiquetaDestaque;
+    private Integer pontosResgate;
     private boolean disponivelVenda = true;
     private java.util.List<ProdutoOpcional> opcionais = java.util.List.of();
     private FichaVitrine fichaVitrine = FichaVitrine.VAZIA;
@@ -21,6 +23,18 @@ public class Produto {
                    BigDecimal custoProducao, BigDecimal estoqueAtual, BigDecimal estoqueMinimo, String urlImagem) {
         setId(id); setCategoria(categoria); setNome(nome); setDescricao(descricao); setPrecoVenda(precoVenda);
         setCustoProducao(custoProducao); setEstoqueAtual(estoqueAtual); setEstoqueMinimo(estoqueMinimo); setUrlImagem(urlImagem);
+    }
+    public String getEtiquetaDestaque() { return etiquetaDestaque; }
+    public void setEtiquetaDestaque(String valor) {
+        String etiqueta = valor == null ? "" : valor.strip();
+        if (etiqueta.codePointCount(0, etiqueta.length()) > 40 || etiqueta.codePoints().anyMatch(Character::isISOControl))
+            throw new IllegalArgumentException("A etiqueta deve ter até 40 caracteres e nenhuma quebra de linha.");
+        etiquetaDestaque = etiqueta.isEmpty() ? null : etiqueta;
+    }
+    public Integer getPontosResgate() { return pontosResgate; }
+    public void setPontosResgate(Integer pontos) {
+        if (pontos != null && pontos < 1) throw new IllegalArgumentException("Informe um custo positivo em pontos ou deixe em branco.");
+        pontosResgate = pontos;
     }
     public Long getId() { return id; }
     public void setId(Long id) { this.id = Validacao.id(id); }

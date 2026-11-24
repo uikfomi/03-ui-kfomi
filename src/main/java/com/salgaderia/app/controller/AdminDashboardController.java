@@ -6,6 +6,7 @@ import com.salgaderia.app.exception.EstoqueInsuficienteException;
 import com.salgaderia.app.exception.ProdutoIndisponivelException;
 import java.time.LocalTime;
 import com.salgaderia.app.model.*;
+import com.salgaderia.app.model.IndicadoresComerciais.*;
 import com.salgaderia.app.model.enums.*;
 import com.salgaderia.app.model.comanda.*;
 import com.salgaderia.app.service.*;
@@ -49,6 +50,7 @@ public class AdminDashboardController implements TelaAutenticada {
     @FXML private BorderPane raiz;
     @FXML private Label titulo, usuarioNome, badgePendentes, avisoPedido;
     @FXML private VBox conteudo, alertasRecentes;
+    private final InteligenciaComercialService comercial = new InteligenciaComercialService();
     private final LogisticaService logistica = new LogisticaService();
     private final OperacaoLojaService operacaoLoja = new OperacaoLojaService();
     private final ProdutoEstoqueService produtos;
@@ -110,7 +112,7 @@ public class AdminDashboardController implements TelaAutenticada {
         if(!notificacoesAtivas||consultaNotificacoes)return;consultaNotificacoes=true;
         Task<List<PedidoFila>> tarefa=new Task<>(){@Override protected List<PedidoFila> call(){return pedidos.listarFila();}};
         tarefa.setOnSucceeded(e->{consultaNotificacoes=false;if(!notificacoesAtivas)return;
-            List<PedidoFila> pendentes=tarefa.getValue().stream().filter(p->p.status()==StatusPedido.PENDENTE).toList();
+            List<PedidoFila> pendentes=tarefa.getValue().stream().filter(p->p.status()==StatusPedido.PENDENTE && p.statusPagamento()!=StatusPagamento.AGUARDANDO_CARTAO).toList();
             badgePendentes.setText("Pedidos pendentes: "+pendentes.size());
             boolean mudou=false;
             for(PedidoFila pedido:pendentes)if(pedidosConhecidos.add(pedido.id())&&!primeiraConsulta){
@@ -326,16 +328,18 @@ public class AdminDashboardController implements TelaAutenticada {
             conteudo.getChildren().clear();conteudo.getChildren().addAll(texto("Pedidos da vitrine aguardando preparo ou entrega.","subtitle"),notificarStatus);
             if(lista.isEmpty()){conteudo.getChildren().add(estado("Nenhum pedido aguardando atendimento."));return;}
             for(PedidoFila p:lista){
-                String pagamento=p.pixDemonstracao()?" · SIMULAÇÃO (nenhum pagamento real)":p.pixReal()?" · PIX confirmado":" · Pagamento na entrega";
+                boolean aguardaCartao = p.statusPagamento()==StatusPagamento.AGUARDANDO_CARTAO;
+                String pagamento=p.cartaoApp() ? (aguardaCartao ? " · Cartão App a confirmar" : " · Cartão App confirmado") : p.pixDemonstracao()?" · SIMULAÇÃO (nenhum pagamento real)":p.pixReal()?" · PIX confirmado":" · Pagamento na entrega";
                 Label info=new Label("#"+p.id()+"  ·  "+p.cliente()+"  ·  "+p.status()+"  ·  "+p.entrega()+"  ·  "+moeda(p.total())+pagamento+"\n"+p.itens()+(p.enderecoEntrega()==null||p.enderecoEntrega().isBlank()?"":"\nEndereço: "+p.enderecoEntrega())+(p.agendadoPara()==null?"":"\nAgendado: "+p.agendadoPara().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"))));info.setWrapText(true);HBox.setHgrow(info,Priority.ALWAYS);
                 if(p.bairro()!=null)info.setText(info.getText()+"\nBairro: "+p.bairro());
                 if(p.nomeEntregador()!=null)info.setText(info.getText()+"\nEntregador: "+p.nomeEntregador());
                 StatusPedido proximo=p.status().proximo(p.entrega());
                 Button avancar=botao(proximo==StatusPedido.SAIU_ENTREGA?"Despachar entrega":"Avançar para "+proximo,()->mudarStatus(p,proximo),"button-primary");
-                avancar.setDisable(proximo==null);
+                avancar.setDisable(proximo==null || aguardaCartao);
                 Button cancelar=botao("Cancelar",()->{if(confirmar("Cancelar pedido #"+p.id()+"? O saldo físico baixado será devolvido."))mudarStatus(p,StatusPedido.CANCELADO);},"button-outline");
-                cancelar.setDisable(p.pixReal());
+                cancelar.setDisable(p.pixReal() || p.cartaoApp() && !aguardaCartao);
                 if(p.pixReal())cancelar.setTooltip(new Tooltip("Estornos de PIX real devem ser tratados no Mercado Pago."));
+                if (p.cartaoApp() && !aguardaCartao) cancelar.setTooltip(new Tooltip("Estorno deve ser tratado com o provedor de cartão."));
                 Button chamar=botao("Chamar no WhatsApp",()->chamarCliente(p,p.status(),p.nomeEntregador()),"button-secondary");
                 chamar.setDisable(p.telefone()==null||p.telefone().isBlank());
                 Label atraso = texto("⚠️ ATRASADO", "pedido-atraso-titulo");
@@ -351,6 +355,10 @@ public class AdminDashboardController implements TelaAutenticada {
                     dados.getChildren().add(preparo);
                 }
                 HBox linha=new HBox(10,dados,avancar,cancelar,chamar);linha.setAlignment(Pos.CENTER_LEFT);linha.getStyleClass().add("admin-card");conteudo.getChildren().add(linha);
+                if (aguardaCartao) linha.getChildren().add(botao("Confirmar Cartão App", () -> {
+                    if (usuario instanceof UsuarioAdmin admin && confirmar("Você conferiu o recebimento externo de " + moeda(p.total()) + " para o pedido #" + p.id() + "?"))
+                        executar(() -> { pedidos.confirmarCartaoApp(p.id(),admin);return null; }, x -> { atualizarNotificacoes();fila(); });
+                }, "button-primary"));
                 Runnable atualizarAtraso = () -> {
                     boolean atrasado = p.atrasadoEm(LocalDateTime.now());
                     atraso.setVisible(atrasado);
@@ -474,6 +482,8 @@ public class AdminDashboardController implements TelaAutenticada {
         categoria.getItems().setAll(categorias.stream().map(Categoria::getNome).toList());
         categoria.setPromptText("Selecione ou digite uma categoria");
         if (atual != null && atual.getCategoria() != null) categoria.setValue(atual.getCategoria().getNome());
+        TextField etiqueta = campo(atual == null ? "" : atual.getEtiquetaDestaque(), "Ex.: Mais Pedido");
+        TextField pontos = campo(atual == null || atual.getPontosResgate()==null ? "" : atual.getPontosResgate().toString(), "Deixe em branco para desabilitar");
         VBox linhasOpcionais = new VBox(6);
         Label semOpcionais = texto("Nenhum opcional cadastrado.", "subtitle");
         semOpcionais.visibleProperty().bind(javafx.beans.binding.Bindings.isEmpty(linhasOpcionais.getChildren()));
@@ -482,11 +492,15 @@ public class AdminDashboardController implements TelaAutenticada {
         Button adicionarOpcional = botao("Adicionar opcional", () -> adicionarLinhaOpcional(linhasOpcionais, null), "button-secondary");
         VBox campos=new VBox(8,new Label("Nome"),nome,new Label("Descrição"),descricao,new Label("Categoria"),categoria,new Label("Preço de venda"),preco,new Label("Custo de produção"),custo,new Label("Estoque físico (controle interno)"),estoqueInterno,new Label("Estoque mínimo"),minimo,new Label("Imagem"),escolher,new Label("URL ou caminho (opcional)"),imagem);campos.setPadding(new Insets(10));
         Label ajuda = texto("Repita o nome do grupo, o número de escolhas grátis e o máximo em cada opção do mesmo grupo.", "subtitle"); ajuda.setWrapText(true);
-        campos.getChildren().addAll(new Label("Bordas e adicionais"), ajuda, semOpcionais, linhasOpcionais, adicionarOpcional);
+        campos.getChildren().addAll(new Label("Etiqueta de destaque (até 40 caracteres)"), etiqueta,
+                new Label("Pontos para resgate (opcional)"), pontos, new Label("Bordas e adicionais"), ajuda, semOpcionais, linhasOpcionais, adicionarOpcional);
         ScrollPane scroll=new ScrollPane(campos);scroll.setFitToWidth(true);scroll.setPrefViewportHeight(470);scroll.setPrefViewportWidth(660);dialog.getDialogPane().setContent(scroll);
         dialog.getDialogPane().lookupButton(ButtonType.OK).addEventFilter(javafx.event.ActionEvent.ACTION, evento -> {
             try{
                 Produto p=new Produto(atual==null?null:atual.getId(),null,nome.getText(),descricao.getText(),decimal(preco.getText()),decimal(custo.getText()),atual==null?BigDecimal.ZERO:atual.getEstoqueAtual(),decimal(minimo.getText()),imagem.getText().isBlank()?null:imagem.getText());
+                p.setEtiquetaDestaque(etiqueta.getText());
+                try { p.setPontosResgate(pontos.getText().isBlank() ? null : Integer.valueOf(pontos.getText().strip())); }
+                catch (NumberFormatException e) { throw new IllegalArgumentException("Informe um número inteiro positivo de pontos."); }
                 if(atual!=null)p.setFichaVitrine(atual.getFichaVitrine());
                 BigDecimal digitado=decimal(estoqueInterno.getText());
                 BigDecimal ajuste=atual==null||digitado.compareTo(atual.getEstoqueAtual())==0?null:digitado;
@@ -600,6 +614,89 @@ public class AdminDashboardController implements TelaAutenticada {
         Button alterar = botao("Editar selecionado", () -> editar.accept(tabela.getSelectionModel().getSelectedItem()), "button-secondary");
         alterar.disableProperty().bind(tabela.getSelectionModel().selectedItemProperty().isNull());
         conteudo.getChildren().setAll(tabela, new HBox(8, novo, alterar));
+    }
+
+    @FXML private void radarClientes() {
+        if (!(usuario instanceof UsuarioAdmin admin)) return;
+        long versao = iniciarTela("Radar de Clientes");
+        carregar(versao, () -> comercial.radar(admin), clientes -> {
+            TableView<ClienteRadar> tabela = new TableView<>();tabela.setPrefHeight(320);
+            tabela.setPlaceholder(estado("Nenhum cliente VIP ou sumido encontrado."));
+            coluna(tabela,"Cliente",ClienteRadar::nome,180);
+            coluna(tabela,"Segmento",c -> c.vip() ? c.sumido() ? "VIP · Sumido" : "VIP" : "Sumido",130);
+            coluna(tabela,"Último pedido",c -> c.ultimoPedido()==null ? "Sem pedidos" : c.ultimoPedido().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")),140);
+            coluna(tabela,"Telefone",c -> nulo(c.telefone()),130);
+            tabela.getItems().setAll(clientes);
+            var selecionado = tabela.getSelectionModel().selectedItemProperty();
+            Button reativar = botao("Gerar / enviar VOLTA10", () -> {
+                ClienteRadar c = selecionado.get();
+                if (c != null && c.sumido()) executar(() -> comercial.reativar(admin,c), cupom -> oferecerReativacao(c,cupom));
+            }, "button-primary");
+            reativar.disableProperty().bind(javafx.beans.binding.Bindings.createBooleanBinding(
+                    () -> selecionado.get()==null || !selecionado.get().sumido(), selecionado));
+            Button vip = botao("Oferecer brinde VIP no WhatsApp", () -> {
+                ClienteRadar c = selecionado.get();
+                if (c!=null && c.vip()) abrirContatoRadar(c, "Olá! Como cliente do Clube VIP, você pode receber um mimo ou molho especial. Fale com a loja para combinar.");
+            }, "button-secondary");
+            vip.disableProperty().bind(javafx.beans.binding.Bindings.createBooleanBinding(
+                    () -> selecionado.get()==null || !selecionado.get().vip() || selecionado.get().telefone()==null, selecionado));
+            conteudo.getChildren().setAll(texto("VIP: assinatura ativa. Sumido: último pedido há mais de 10 dias.","subtitle"),
+                    tabela, new FlowPane(8,8,reativar,vip));
+        });
+    }
+    private void oferecerReativacao(ClienteRadar cliente, CupomReativacao cupom) {
+        Dialog<ButtonType> dialog = dialog("Cupom exclusivo VOLTA10");
+        TextField codigo = campo("VOLTA10", "Cupom");codigo.setEditable(false);
+        ButtonType enviar = new ButtonType("Abrir WhatsApp", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().setAll(ButtonType.CLOSE,enviar);
+        dialog.getDialogPane().lookupButton(enviar).setDisable(cliente.telefone()==null);
+        String validade = cupom.validoAte().format(DateTimeFormatter.ofPattern("dd/MM/yyyy 'às' HH:mm"));
+        dialog.getDialogPane().setContent(new VBox(8, texto("10% de desconto · uso único até " + validade,"subtitle"),codigo));
+        if (dialog.showAndWait().orElse(ButtonType.CLOSE)==enviar)
+            abrirContatoRadar(cliente,"Olá! Estamos com saudades. Use VOLTA10 na sua conta para ter 10% de desconto em um pedido até " + validade + ".");
+    }
+    private void abrirContatoRadar(ClienteRadar cliente,String mensagem) {
+        try {
+            var uri = new WhatsAppLinkService.Builder(cliente.telefone()).linha(mensagem).linha("Equipe Ui K'fomi").construir();
+            WhatsAppUi.abrir(raiz.getScene().getWindow(),whatsapp,uri);
+        } catch (IllegalArgumentException e) { avisar(Alert.AlertType.WARNING,"Telefone indisponível",e.getMessage()); }
+    }
+    @FXML private void fechamentoCaixa() {
+        if (!(usuario instanceof UsuarioAdmin admin)) return;
+        iniciarTela("Fechamento de Caixa Detalhado");
+        LocalDate hoje = LocalDate.now(InteligenciaComercialService.FUSO);
+        DatePicker inicio = new DatePicker(hoje), fim = new DatePicker(hoje);
+        inicio.setEditable(false);fim.setEditable(false);
+        VBox dados = new VBox(10);
+        Runnable consultar = () -> {
+            LocalDate de = inicio.getValue(), ate = fim.getValue();
+            if (de==null || ate==null || ate.isBefore(de)) {
+                avisar(Alert.AlertType.WARNING,"Período inválido","O fim precisa ser igual ou posterior ao início.");return;
+            }
+            long versao = ++telaAtual;
+            dados.getChildren().setAll(estado("Consultando entradas e bairros…"));
+            carregar(versao, () -> comercial.fechamento(admin,de,ate), resultado -> montarFechamento(dados,resultado));
+        };
+        conteudo.getChildren().setAll(texto("Entradas pela confirmação do pagamento, incluindo parcelas de comandas; não é o lucro do período.","subtitle"),
+                new FlowPane(8,8,new VBox(4,new Label("Início"),inicio),new VBox(4,new Label("Fim (inclusive)"),fim),
+                        new VBox(4,new Label("Período"),botao("Consultar",consultar,"button-primary"))),dados);
+        consultar.run();
+    }
+    private void montarFechamento(VBox dados, Fechamento resultado) {
+        TableView<EntradaCaixa> entradas = new TableView<>();entradas.setPrefHeight(210);
+        entradas.setPlaceholder(estado("Nenhum recebimento no período."));
+        coluna(entradas,"Meio de pagamento",EntradaCaixa::canal,220);
+        coluna(entradas,"Recebimentos",e -> Long.toString(e.recebimentos()),125);
+        coluna(entradas,"Total",e -> moeda(e.total()),120);
+        entradas.getItems().setAll(resultado.entradas());
+        var total = resultado.entradas().stream().map(EntradaCaixa::total).reduce(BigDecimal.ZERO,BigDecimal::add);
+        TableView<BairroRanking> bairros = new TableView<>();bairros.setPrefHeight(210);
+        bairros.setPlaceholder(estado("Nenhuma entrega paga com bairro no período."));
+        coluna(bairros,"Bairro",BairroRanking::bairro,220);
+        coluna(bairros,"Pedidos pagos",b -> Long.toString(b.pedidos()),125);
+        bairros.getItems().setAll(resultado.bairros());
+        dados.getChildren().setAll(texto("Total recebido: " + moeda(total),"admin-subtitulo"),entradas,
+                texto("Ranking de Bairros que Mais Pedem","admin-subtitulo"),bairros);
     }
 
     @FXML private void financeiro(){

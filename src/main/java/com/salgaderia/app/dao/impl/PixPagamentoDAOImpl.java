@@ -68,7 +68,7 @@ public final class PixPagamentoDAOImpl implements PixPagamentoDAO {
         }
     }
     @Override public void pagar(Connection c,long pedidoId)throws SQLException{
-        try(var ps=c.prepareStatement("UPDATE pedidos SET status_pagamento='PAGO',pix_payload=NULL WHERE id=? AND status_pagamento='AGUARDANDO_PIX'")){
+        try(var ps=c.prepareStatement("UPDATE pedidos SET status_pagamento='PAGO',pago_em=NOW(),pix_payload=NULL WHERE id=? AND status_pagamento='AGUARDANDO_PIX'")){
             ps.setLong(1,pedidoId);if(ps.executeUpdate()!=1)throw new SQLException("Pedido PIX não estava aguardando confirmação.");
         }
     }

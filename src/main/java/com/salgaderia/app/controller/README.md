@@ -8,7 +8,7 @@ Mantenha as responsabilidades desta camada separadas das demais e consulte os ar
 
 Na v1.7.0, o painel administrativo edita categorias livres e grupos de opcionais no cadastro de produtos, configura o mínimo de entrega e destaca as instruções de preparo. A vitrine coordena o diálogo de personalização, explica quanto falta para o mínimo e oferece cancelamento apenas em pedidos pendentes.
 
-Na v1.8.0, o Admin gerencia bairros e parceiros, ativa Chuva/Pico, acompanha repasses e destaca pedidos atrasados. A vitrine exige bairro atendido e mostra a taxa e o prazo cotados.
+Na v1.9.0, o Admin gerencia bairros e parceiros, ativa Chuva/Pico, acompanha repasses e destaca pedidos atrasados. A vitrine exige bairro atendido e mostra a taxa e o prazo cotados.
 
 ## Explore as subpastas e arquivos
 

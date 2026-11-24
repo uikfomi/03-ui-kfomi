@@ -13,6 +13,13 @@ public final class PedidoItem {
     private final PersonalizacaoItem personalizacao;
     private final Set<Long> opcionaisIds;
     private final String adicionaisResumo;
+    private final Integer pontosResgate;
+    private final BigDecimal valorResgate;
+    public static PedidoItem resgate(Produto produto) {
+        if (produto.getPontosResgate() == null) throw new IllegalArgumentException("Produto não habilitado para resgate.");
+        return new PedidoItem(null, produto, BigDecimal.ONE, BigDecimal.ZERO, null, null,
+                Set.of(), null, produto.getPontosResgate(), produto.getPrecoVenda());
+    }
     public PedidoItem(Long id, Produto produto, BigDecimal quantidade, BigDecimal precoUnitario) {
         this(id, produto, quantidade, precoUnitario, null, null);
     }
@@ -22,6 +29,11 @@ public final class PedidoItem {
     }
     public PedidoItem(Long id, Produto produto, BigDecimal quantidade, BigDecimal precoUnitario,
                       String observacaoPersonalizada, PersonalizacaoItem personalizacao, Set<Long> opcionaisIds, String adicionaisResumo) {
+        this(id, produto, quantidade, precoUnitario, observacaoPersonalizada, personalizacao, opcionaisIds, adicionaisResumo, null, BigDecimal.ZERO);
+    }
+    public PedidoItem(Long id, Produto produto, BigDecimal quantidade, BigDecimal precoUnitario,
+                      String observacaoPersonalizada, PersonalizacaoItem personalizacao, Set<Long> opcionaisIds, String adicionaisResumo,
+                      Integer pontosResgate, BigDecimal valorResgate) {
         this.id = Validacao.id(id);
         this.produto = Validacao.obrigatorio(produto, "produto");
         this.quantidade = Validacao.positivo(quantidade, "quantidade");
@@ -32,6 +44,16 @@ public final class PedidoItem {
         this.personalizacao = personalizacao;
         this.opcionaisIds = Set.copyOf(opcionaisIds);
         this.adicionaisResumo = adicionaisResumo;
+        this.pontosResgate = pontosResgate;
+        this.valorResgate = Validacao.naoNegativo(valorResgate, "valor do resgate");
+        if (pontosResgate != null && (pontosResgate <= 0 || quantidade.compareTo(BigDecimal.ONE) != 0 || precoUnitario.signum() != 0
+                || observacaoPersonalizada != null || personalizacao != null || !opcionaisIds.isEmpty() || adicionaisResumo != null))
+            throw new IllegalArgumentException("Um resgate é uma unidade sem personalização ou cobrança.");
+    }
+    public boolean isResgate() { return pontosResgate != null; }
+    public Integer getPontosResgate() { return pontosResgate; }
+    public BigDecimal getValorResgate() { return valorResgate; }
+    public String descricaoResgate() { return "Resgate de " + pontosResgate + " pontos";
     }
     public Long getId() { return id; }
     public Produto getProduto() { return produto; }
@@ -42,11 +64,13 @@ public final class PedidoItem {
     public Set<Long> getOpcionaisIds() { return opcionaisIds; }
     public String getAdicionaisResumo() { return adicionaisResumo; }
     public String detalhesPreparo() {
+        if (isResgate()) return descricaoResgate();
         String adicionais = adicionaisResumo == null ? "" : adicionaisResumo;
         if (personalizacao != null || observacaoPersonalizada == null) return adicionais;
         return adicionais + (adicionais.isEmpty() ? "" : "\n") + "Observação: " + observacaoPersonalizada;
     }
     public PedidoItem comProdutoAtual(Produto atual) {
+        if (isResgate()) return this;
         BigDecimal preco = opcionaisIds.isEmpty() ? atual.getPrecoVenda() : precoUnitario;
         return new PedidoItem(null, atual, quantidade, preco, observacaoPersonalizada, personalizacao, opcionaisIds, adicionaisResumo);
     }

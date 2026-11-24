@@ -13,6 +13,7 @@ import com.salgaderia.app.service.PedidoConcluidoObserver.*;
 import com.salgaderia.app.service.OperacaoLojaService;
 import com.salgaderia.app.service.desconto.*;
 import com.salgaderia.app.service.LogisticaService;
+import com.salgaderia.app.service.FidelidadeService;
 import com.salgaderia.app.service.pix.PixPagamentoService;
 import com.salgaderia.app.util.ConnectionFactory;
 import java.math.BigDecimal;
@@ -28,7 +29,8 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
     private final ClubeDAO clube = new ClubeDAOImpl();
     private final GamificacaoDAO jogo = new GamificacaoDAOImpl();
     private final UsuarioDAO usuarios = new UsuarioDAOImpl(new ContatoDAOImpl());
-    private final BarramentoPedido eventos = new BarramentoPedido(new ConquistasObserver(jogo));
+    private final FidelidadeService fidelidade = new FidelidadeService();
+    private final BarramentoPedido eventos = new BarramentoPedido(new ConquistasObserver(jogo), fidelidade);
     private final CalculadoraDescontos calculadora = new CalculadoraDescontos();
     private final PixPagamentoService pix;
     private final PixPagamentoDAO pixDados=new PixPagamentoDAOImpl();
@@ -59,7 +61,9 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
         if(usuario==null||usuario.getId()==null||!usuario.isAtivo())throw new IllegalArgumentException("Cliente autenticado obrigatório");
         return ConnectionFactory.executarEmTransacao(c->{
             Pedido anterior=pedidos.listarDoCliente(c,usuario).stream().filter(p->p.getStatus()==StatusPedido.ENTREGUE).findFirst().orElseThrow(()->new IllegalArgumentException("Você ainda não possui pedido concluído."));
-            Map<Long,BigDecimal> quantidades=PersonalizacaoService.quantidades(anterior.getItens());
+            var comprados = anterior.getItens().stream().filter(i -> !i.isResgate()).toList();
+            if (comprados.isEmpty()) throw new IllegalArgumentException("O último pedido só contém resgates de pontos.");
+            Map<Long,BigDecimal> quantidades=PersonalizacaoService.quantidades(comprados);
             Map<Long,Produto> atuais=new LinkedHashMap<>();
             List<PedidoItem> resultado=new ArrayList<>();
             for(var entrada:quantidades.entrySet()){
@@ -69,7 +73,7 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
                 atuais.put(entrada.getKey(),atual);
             }
             Map<Long,BigDecimal> avulsos=new LinkedHashMap<>();
-            for(PedidoItem item:anterior.getItens()){
+            for(PedidoItem item:comprados){
                 Produto atual=atuais.get(item.getProduto().getId());
                 if(item.getPersonalizacao()==null) {
                     try{item.getQuantidade().intValueExact();}catch(ArithmeticException e){throw new IllegalArgumentException("O pedido anterior contém quantidade não inteira.",e);}
@@ -109,7 +113,14 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
                 p.exigirDisponivelParaVenda();
                 atuais.put(id,p);
             }
-            return calcular(c,pedido,codigo,validarItens(c,pedido,atuais,false),false,null,
+            var itens = validarItens(c,pedido,atuais,false);
+            int resgate = pontosResgate(itens,pedido);
+            if (resgate > 0) {
+                if (!usuarios.bloquearClienteAtivo(c,pedido.getUsuario().getId(),pedido.getCliente().getId()))
+                    throw new IllegalArgumentException("Cliente autenticado obrigatório para resgate.");
+                fidelidade.validarSaldo(c,pedido.getCliente().getId(),resgate);
+            }
+            return calcular(c,pedido,codigo,itens,false,null,
                     pedido.getUsuario() instanceof UsuarioCliente && pedido.getTipoEntrega() == TipoEntrega.ENTREGA ? operacao.consultar(c) : null);
         });
     }
@@ -118,6 +129,14 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
         Map<Long,List<ProdutoOpcional>> opcoes = new HashMap<>();
         for (PedidoItem item : pedido.getItens()) {
             Produto atual = atuais.get(item.getProduto().getId());
+            if (item.isResgate()) {
+                if (!(pedido.getUsuario() instanceof UsuarioCliente) || !Objects.equals(atual.getPontosResgate(), item.getPontosResgate())
+                        || atual.getPrecoVenda().compareTo(item.getValorResgate()) != 0)
+                    throw new IllegalArgumentException("A recompensa mudou. Remova o resgate e selecione novamente.");
+                itens.add(PedidoItem.resgate(atual));
+                continue;
+            }
+            if (item.getValorResgate().signum() != 0) throw new IllegalArgumentException("Valor de resgate inválido.");
             List<ProdutoOpcional> catalogo = List.of();
             if (!item.getOpcionaisIds().isEmpty()) {
                 if (!(pedido.getUsuario() instanceof UsuarioCliente) || item.getPersonalizacao() != null)
@@ -136,6 +155,14 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
         }
         PersonalizacaoService.validarComposicao(itens);
         return itens;
+    }
+    private static int pontosResgate(List<PedidoItem> itens, Pedido pedido) {
+        var resgates = itens.stream().filter(PedidoItem::isResgate).toList();
+        if (resgates.isEmpty()) return 0;
+        if (resgates.size() != 1 || !(pedido.getUsuario() instanceof UsuarioCliente cliente) || pedido.getCliente() == null
+                || pedido.getCliente().getId() == null || !Objects.equals(cliente.getCliente().getId(), pedido.getCliente().getId()))
+            throw new IllegalArgumentException("Apenas um resgate é permitido por pedido de uma conta cliente.");
+        return resgates.get(0).getPontosResgate();
     }
     private ResultadoDesconto calcular(Connection c,Pedido pedido,String codigo,List<PedidoItem> itens,boolean bloqueado,GamificacaoDAO.Conta conta,ConfiguracaoLoja config) throws SQLException {
         long entregues=pedido.getCliente()==null||pedido.getCliente().getId()==null?0:pedidos.contarEntreguesDoCliente(c,pedido.getCliente().getId());
@@ -166,13 +193,14 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
         Objects.requireNonNull(pedido);if(pedido.getId()!=null||pedido.getStatus()!=StatusPedido.PENDENTE||pedido.getItens().isEmpty())throw new IllegalArgumentException("Pedido deve ser novo, pendente e conter itens");
         if(!(pedido.getUsuario() instanceof UsuarioCliente)&&pedido.getAgendadoPara()!=null&&!pedido.getAgendadoPara().isAfter(LocalDateTime.now()))throw new IllegalArgumentException("O agendamento deve estar no futuro");
         if(pedido.getUsuario()!=null && pedido.getUsuario().getId()==null)throw new IllegalArgumentException("Usuário sem ID");
+        if(forma==FormaPagamento.CARTAO_APP) throw new IllegalArgumentException("Cartão App é exclusivo da vitrine.");
         if(forma!=null && (!(pedido.getUsuario() instanceof UsuarioAdmin) || pedido.getUsuario().getId()==null || !pedido.getUsuario().isAtivo()))
             throw new IllegalArgumentException("Venda PDV exige administrador ativo");
         if(pedido.getCliente()!=null && pedido.getCliente().getId()==null)throw new IllegalArgumentException("Cliente sem ID");
         if(pedido.getUsuario() instanceof UsuarioCliente u && (pedido.getCliente()==null || !Objects.equals(u.getCliente().getId(),pedido.getCliente().getId())))throw new IllegalArgumentException("Cliente não corresponde ao usuário");
-        if(pedido.getUsuario() instanceof UsuarioCliente && (pedido.getFormaPagamento()==null ||
-                (pedido.getFormaPagamento()!=FormaPagamento.PIX && pedido.getFormaPagamento()!=FormaPagamento.DINHEIRO && pedido.getFormaPagamento()!=FormaPagamento.CARTAO)))
-            throw new IllegalArgumentException("Selecione PIX, dinheiro ou cartão");
+        if(pedido.getUsuario() instanceof UsuarioCliente && (pedido.getFormaPagamento()!=null &&
+                (pedido.getFormaPagamento()!=FormaPagamento.PIX && pedido.getFormaPagamento()!=FormaPagamento.DINHEIRO && pedido.getFormaPagamento()!=FormaPagamento.CARTAO && pedido.getFormaPagamento()!=FormaPagamento.CARTAO_APP)))
+            throw new IllegalArgumentException("Selecione uma forma de pagamento");
         Map<Long,BigDecimal> quantidades=new TreeMap<>();
         for(PedidoItem item:pedido.getItens()){
             Long id=item.getProduto().getId();if(id==null)throw new IllegalArgumentException("Produto sem ID");
@@ -206,6 +234,7 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
                 bloqueados.put(entrada.getKey(),p);custos.put(entrada.getKey(),p.getCustoProducao());
             }
             List<PedidoItem> itens = validarItens(c,pedido,bloqueados,true);
+            int resgate = pontosResgate(itens,pedido);
             if (vitrine) {
                 BigDecimal falta = OperacaoLojaService.faltaParaEntrega(config, pedido.getTipoEntrega(), itens);
                 if (falta.signum() > 0) throw new IllegalArgumentException("Adicione mais R$ " + falta.toPlainString().replace('.', ',') + " para atingir o mínimo de entrega (sem frete).");
@@ -213,16 +242,23 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
             ResultadoDesconto desconto=calcular(c,pedido,codigo,itens,true,conta,config);
             if(esperado!=null && (desconto.subtotal().compareTo(esperado.subtotal())!=0 || desconto.desconto().compareTo(esperado.desconto())!=0 ||
                     desconto.taxaEntrega().compareTo(esperado.taxaEntrega())!=0 || !desconto.estrategia().equals(esperado.estrategia()) ||
-                    !Objects.equals(desconto.tempoEstimadoMin(),esperado.tempoEstimadoMin()) || desconto.freteGratisVip()!=esperado.freteGratisVip()||!Objects.equals(desconto.cupom(),esperado.cupom())||!Objects.equals(desconto.brinde(),esperado.brinde())))
+                    !Objects.equals(desconto.tempoEstimadoMin(),esperado.tempoEstimadoMin()) || desconto.freteGratisVip()!=esperado.freteGratisVip() || desconto.freteIsentoVip().compareTo(esperado.freteIsentoVip())!=0||!Objects.equals(desconto.cupom(),esperado.cupom())||!Objects.equals(desconto.brinde(),esperado.brinde())))
                 throw new IllegalArgumentException("Preço, prazo ou desconto mudou. Confira a nova cotação antes de confirmar.");
+            if (vitrine && desconto.total().signum()>0 && pedido.getFormaPagamento()==null)
+                throw new IllegalArgumentException("Selecione uma forma de pagamento.");
             if(forma!=null && forma.isPermiteTroco() && (recebido==null || recebido.scale()>2 || recebido.compareTo(desconto.total())<0 || recebido.compareTo(new BigDecimal("99999999.99"))>0))
                 throw new IllegalArgumentException("Valor recebido insuficiente ou inválido");
             if (!vitrine || pedido.getTipoEntrega() != TipoEntrega.ENTREGA) pedido.setBairroId(null);
             pedido.setTempoEstimadoMin(desconto.tempoEstimadoMin());
             long pedidoId=pedidos.inserir(c,pedido,custos,baixas);
             pedidos.registrarDesconto(c,pedidoId,desconto);
-            boolean pixVitrine=vitrine&&pedido.getFormaPagamento()==FormaPagamento.PIX;
-            if(pixVitrine)pix.registrar(c,pedidoId,pedido,desconto.total());
+            if (resgate > 0) fidelidade.debitar(c,conta.contatoId(),pedidoId,resgate);
+            boolean semCobranca = vitrine && desconto.total().signum() == 0;
+            boolean pixVitrine = vitrine && !semCobranca && pedido.getFormaPagamento()==FormaPagamento.PIX;
+            boolean cartaoApp = vitrine && !semCobranca && pedido.getFormaPagamento()==FormaPagamento.CARTAO_APP;
+            if (semCobranca) pedidos.registrarSemCobranca(c,pedidoId);
+            if (pixVitrine) pix.registrar(c,pedidoId,pedido,desconto.total());
+            if (cartaoApp) pedidos.prepararCartaoApp(c,pedidoId);
             if(forma!=null) pedidos.registrarPdv(c,pedidoId,forma,forma.isPermiteTroco()?recebido:desconto.total(),forma.isPermiteTroco()?recebido.subtract(desconto.total()):BigDecimal.ZERO);
             for(var entrada:bloqueados.entrySet()){
                 BigDecimal baixa=baixas.get(entrada.getKey());
@@ -232,13 +268,25 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
             }
             if(vitrine&&desconto.cupom()!=null)cupons.reservar(c,conta.usuarioId(),desconto.cupom(),pedidoId);
             eventos.publicar(c,new Evento(pedidoId,conta,forma==null?Etapa.FINALIZADO:Etapa.ENTREGUE,vitrine));
-            boolean pendente=pixVitrine&&desconto.total().signum()>0;
-            StatusPagamento pagamento=pendente?StatusPagamento.AGUARDANDO_PIX:forma!=null||pixVitrine?StatusPagamento.PAGO:StatusPagamento.NA_ENTREGA;
-            return new Venda(pedidoId,desconto,pagamento,pendente&&!pix.usaMercadoPago());
+            StatusPagamento pagamento = pixVitrine ? StatusPagamento.AGUARDANDO_PIX : cartaoApp ? StatusPagamento.AGUARDANDO_CARTAO
+                    : forma != null || semCobranca ? StatusPagamento.PAGO : StatusPagamento.NA_ENTREGA;
+            return new Venda(pedidoId,desconto,pagamento,pixVitrine&&!pix.usaMercadoPago());
         });
         pedido.setId(venda.id());pedido.setRoletaLiberada(false);pedido.setStatusPagamento(venda.pagamento());pedido.setPixDemonstracao(venda.demo());
         pedido.setTaxaEntrega(venda.desconto().taxaEntrega());pedido.setDesconto(venda.desconto().desconto());pedido.setBrinde(venda.desconto().brinde());
         return venda.id();
+    }
+    @Override public void confirmarCartaoApp(long pedidoId, UsuarioAdmin admin) {
+        ConnectionFactory.executarEmTransacao(c -> {
+            if (admin == null || !admin.isAtivo() || admin.getId() == null ||
+                    usuarios.buscarPorId(c,admin.getId()).filter(u -> u instanceof UsuarioAdmin && u.isAtivo()).isEmpty())
+                throw new IllegalArgumentException("Confirmação exige administrador ativo.");
+            var conta = bloquearConta(c,jogo.contaDoPedido(c,pedidoId).orElse(null));
+            pedidos.bloquearFluxo(c,pedidoId);
+            pedidos.confirmarCartaoApp(c,pedidoId);
+            eventos.publicar(c,new Evento(pedidoId,conta,Etapa.PAGAMENTO_CONFIRMADO,true));
+            return null;
+        });
     }
     @Override public void cancelarDoCliente(UsuarioCliente cliente, long pedidoId) {
         if (cliente == null || cliente.getId() == null || !cliente.isAtivo() || cliente.getCliente().getId() == null)
@@ -252,6 +300,7 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
             var cobranca = pixDados.buscar(c, pedidoId, true).orElse(null);
             if (cobranca != null && cobranca.provedor() == PixPagamentoDAO.Provedor.MERCADO_PAGO && cobranca.tentativa() != null)
                 throw new IllegalArgumentException("Este pedido tem uma cobrança PIX real iniciada. Entre em contato com a loja para verificar o pagamento e o cancelamento.");
+            exigirCartaoNaoPago(c,pedidoId);
             cancelamento.cancelar(c, pedidoId);
             return null;
         });
@@ -268,12 +317,14 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
             var fluxo=pedidos.bloquearFluxo(c,pedidoId);
             StatusPedido atual=fluxo.status();
             if(!atual.podeTransicionarPara(destino,fluxo.modalidade()))throw new IllegalStateException("Transição inválida: "+atual+" -> "+destino);
-            if(destino!=StatusPedido.CANCELADO&&pedidos.statusPagamento(c,pedidoId)==StatusPagamento.AGUARDANDO_PIX)
-                throw new IllegalStateException("Aguarde a confirmação PIX antes de preparar o pedido.");
+            var pagamento = pedidos.statusPagamento(c,pedidoId);
+            if(destino!=StatusPedido.CANCELADO && (pagamento == StatusPagamento.AGUARDANDO_PIX || pagamento == StatusPagamento.AGUARDANDO_CARTAO))
+                throw new IllegalStateException("Aguarde a confirmação do pagamento antes de preparar o pedido.");
             if(destino==StatusPedido.CANCELADO){
                 var cobranca=pixDados.buscar(c,pedidoId,true).orElse(null);
                 if(cobranca!=null&&cobranca.provedor()==PixPagamentoDAO.Provedor.MERCADO_PAGO&&cobranca.tentativa()!=null)
                     throw new IllegalStateException("PIX real iniciado: confira e trate a cobrança no Mercado Pago. O aplicativo não emite estornos.");
+                exigirCartaoNaoPago(c,pedidoId);
                 cancelamento.cancelar(c,pedidoId);return null;
             }
             if(destino==StatusPedido.SAIU_ENTREGA) {
@@ -286,6 +337,9 @@ public class PedidoVendaServiceImpl implements PedidoVendaService {
             if(destino==StatusPedido.ENTREGUE)eventos.publicar(c,new Evento(pedidoId,conta,Etapa.ENTREGUE,false));
             return null;
         });
+    }
+    private void exigirCartaoNaoPago(Connection c,long id) throws SQLException {
+        if (pedidos.cartaoAppPago(c,id)) throw new IllegalArgumentException("Cartão App confirmado. Trate o estorno fora do aplicativo antes de resolver o pedido.");
     }
     private GamificacaoDAO.Conta bloquearConta(Connection c,GamificacaoDAO.Conta conta)throws SQLException{
         return conta!=null&&usuarios.bloquearClienteAtivo(c,conta.usuarioId(),conta.contatoId())?conta:null;

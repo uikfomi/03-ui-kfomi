@@ -8,13 +8,16 @@ import java.util.Optional;
 
 public final class CupomDAOImpl implements CupomDAO {
     @Override public Optional<Cupom> buscarAtivo(Connection conexao,String codigo,Long usuarioVitrine) throws SQLException {
+        boolean reativacao = "VOLTA10".equals(codigo);
+        String filtro = reativacao ? "codigo LIKE 'VOLTA10-%' AND usuario_exclusivo_id=?" :
+                "codigo=? AND (usuario_exclusivo_id IS NULL OR usuario_exclusivo_id=?)";
         try (var ps = conexao.prepareStatement("""
-                SELECT codigo,percentual,valor_minimo,beneficio,brinde_descricao,valor_beneficio FROM cupons WHERE codigo=? AND ativo=TRUE
-                  AND (usuario_exclusivo_id IS NULL OR usuario_exclusivo_id=?)
-                  AND (valido_ate IS NULL OR valido_ate>NOW()) AND usado_pedido_id IS NULL
-                """)) {
-            ps.setString(1, codigo);
-            ps.setObject(2,usuarioVitrine,java.sql.Types.BIGINT);
+                SELECT codigo,percentual,valor_minimo,beneficio,brinde_descricao,valor_beneficio
+                FROM cupons WHERE ativo=TRUE AND (valido_ate IS NULL OR valido_ate>NOW()) AND usado_pedido_id IS NULL
+                AND """ + filtro + " ORDER BY id DESC LIMIT 1")) {
+            int indice = 1;
+            if (!reativacao) ps.setString(indice++,codigo);
+            ps.setObject(indice,usuarioVitrine,java.sql.Types.BIGINT);
             try (var rs = ps.executeQuery()) {
                 return rs.next()?Optional.of(new Cupom(rs.getString(1),rs.getBigDecimal(2),rs.getBigDecimal(3),
                         Cupom.Beneficio.valueOf(rs.getString(4)),rs.getString(5),rs.getBigDecimal(6))):Optional.empty();

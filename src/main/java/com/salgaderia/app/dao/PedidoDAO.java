@@ -18,6 +18,10 @@ public interface PedidoDAO {
     Fluxo bloquearFluxoDoCliente(Connection c,long id,long usuarioId) throws SQLException;
     void registrarSaidaEntrega(Connection c,long id,long entregadorId,String entregador) throws SQLException;
     com.salgaderia.app.model.enums.StatusPagamento statusPagamento(Connection c,long id) throws SQLException;
+    void prepararCartaoApp(Connection c,long id) throws SQLException;
+    void confirmarCartaoApp(Connection c,long id) throws SQLException;
+    void registrarSemCobranca(Connection c,long id) throws SQLException;
+    boolean cartaoAppPago(Connection c,long id) throws SQLException;
     Map<Long,BigDecimal> quantidadesBaixadas(Connection c,long id) throws SQLException;
     void atualizarStatus(Connection c,long id,com.salgaderia.app.model.enums.StatusPedido status) throws SQLException;
     boolean possuiPedidoEntregue(Connection c,long usuarioId,long produtoId) throws SQLException;

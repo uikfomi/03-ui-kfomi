@@ -87,7 +87,7 @@ class VitrineJavaFXTest {
             fx(()->{
                 assertTrue(((Button)loader.getNamespace().get("finalizar")).isDisabled());
                 @SuppressWarnings("unchecked") ComboBox<FormaPagamento> pagamento=(ComboBox<FormaPagamento>)loader.getNamespace().get("formaPagamento");
-                assertEquals(List.of(FormaPagamento.PIX,FormaPagamento.DINHEIRO,FormaPagamento.CARTAO),List.copyOf(pagamento.getItems()));
+                assertEquals(List.of(FormaPagamento.PIX,FormaPagamento.DINHEIRO,FormaPagamento.CARTAO,FormaPagamento.CARTAO_APP),List.copyOf(pagamento.getItems()));
                 pagamento.setValue(FormaPagamento.PIX);
                 var pix=(com.salgaderia.app.util.PixPainel)loader.getNamespace().get("pixCheckout");
                 assertTrue(pix.isVisible());assertTrue(((Label)pix.getChildren().get(0)).getText().contains("24,60"));
@@ -418,6 +418,7 @@ class VitrineJavaFXTest {
         public void entradaLote(long p,long f,BigDecimal q,String o){throw new UnsupportedOperationException();}public void registrarPerda(long p,BigDecimal q,String o){throw new UnsupportedOperationException();}
     }
     private static class PedidosTeste implements PedidoVendaService {
+        public void confirmarCartaoApp(long pedido,UsuarioAdmin admin){throw new UnsupportedOperationException();}
         public void cancelarDoCliente(UsuarioCliente u,long id){throw new UnsupportedOperationException();}
         public long contarFilaCozinha(){return 0;}
         public List<PedidoItem> repetirUltimoPedido(UsuarioCliente u){return dados.stream().filter(p->p.getStatus()==StatusPedido.ENTREGUE).findFirst().orElseThrow().getItens();}

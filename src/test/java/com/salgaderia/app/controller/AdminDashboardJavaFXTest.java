@@ -121,6 +121,7 @@ class AdminDashboardJavaFXTest {
         public void entradaLote(long p,long f,BigDecimal q,String o){}public void registrarPerda(long p,BigDecimal q,String o){}
     }
     private static class Vendas implements PedidoVendaService {
+        public void confirmarCartaoApp(long pedido,UsuarioAdmin admin){throw new UnsupportedOperationException();}
         public void cancelarDoCliente(UsuarioCliente u,long id){throw new UnsupportedOperationException();}
         public long contarFilaCozinha(){return 0;}
         public List<PedidoItem> repetirUltimoPedido(UsuarioCliente u){return List.of();}
